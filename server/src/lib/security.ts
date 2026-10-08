@@ -7,9 +7,21 @@ import { apiLimiter } from "../middleware/rateLimiter.js";
 import { env } from "./env.js";
 import { HttpError } from "./errors.js";
 
-/** Origine autorisée : liste CORS_ORIGIN, ou même hôte que le serveur (accès direct / proxy). */
+/**
+ * Origines de la WebView de l'application mobile (Capacitor) quand elle sert l'interface
+ * embarquée : Android https://localhost (ou http://localhost), iOS capacitor://localhost.
+ * Aucun site web ne peut se présenter avec ces origines.
+ */
+const NATIVE_APP_ORIGINS = new Set(["capacitor://localhost", "https://localhost", "http://localhost"]);
+
+/** Origine de confiance connue : CORS_ORIGIN, application mobile, ou ce Codespace (tous ports). */
+export function isTrustedOrigin(origin: string): boolean {
+  return env.corsOrigin.includes(origin) || NATIVE_APP_ORIGINS.has(origin) || Boolean(env.codespaceOrigin?.test(origin));
+}
+
+/** Origine autorisée : origine de confiance, ou même hôte que le serveur (accès direct / proxy). */
 export function isAllowedOrigin(origin: string, host: string | undefined, forwardedHost?: string | string[]) {
-  if (env.corsOrigin.includes(origin)) return true;
+  if (isTrustedOrigin(origin)) return true;
   let originHost: string;
   try {
     originHost = new URL(origin).host;
@@ -47,7 +59,7 @@ export function applySecurity(app: Express) {
   );
   app.use(
     cors({
-      origin: (origin, cb) => cb(null, !origin || env.corsOrigin.includes(origin)),
+      origin: (origin, cb) => cb(null, !origin || isTrustedOrigin(origin)),
       credentials: true,
       methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     }),

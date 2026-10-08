@@ -10,9 +10,10 @@
     "typecheck": "tsc -b",
     "cap:build": "vite build && npx cap sync",
     "cap:open": "npx cap open android",
-    "cap:sync": "npx cap sync android",
-    "apk:debug": "npm run cap:build && cd android && ./gradlew assembleDebug",
-    "capacitor:sync:after": "node scripts/android-network-config.mjs"
+    "cap:sync": "vite build && npx cap sync android",
+    "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
+    "capacitor:sync:after": "node scripts/android-network-config.mjs",
+    "android:sdk": "bash scripts/setup-android-sdk.sh"
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.2",

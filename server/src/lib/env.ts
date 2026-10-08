@@ -23,6 +23,17 @@ if (CODESPACE_NAME && GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN) {
   // Le proxy de Codespaces réécrit l'en-tête Origin en https://localhost:<port>
   corsOrigin.push(`https://localhost:${port}`);
 }
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * Toutes les adresses publiques de CE Codespace (https://<codespace>-<port>.app.github.dev),
+ * quel que soit le port : interface Vite (5173), serveur Node (4000), application Android
+ * pointée sur l'une ou l'autre. Les Codespaces d'autres personnes restent refusés.
+ */
+const codespaceOrigin =
+  CODESPACE_NAME && GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN
+    ? new RegExp(`^https://${escapeRe(CODESPACE_NAME)}-\\d{2,5}\\.${escapeRe(GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN)}$`)
+    : null;
+
 // Jamais de joker : les cookies de session ne doivent être acceptés que depuis nos propres écrans
 if (corsOrigin.some((o) => o === "*" || o.includes("*"))) {
   throw new Error("CORS_ORIGIN ne peut pas contenir de joker « * » : listez les origines autorisées");
@@ -32,6 +43,7 @@ export const env = {
   port: Number(process.env.PORT ?? 4000),
   jwtSecret,
   corsOrigin,
+  codespaceOrigin,
   /** Cookie « Secure » (HTTPS). Ne désactiver qu'en test sur réseau local sans TLS. */
   cookieSecure: process.env.COOKIE_SECURE !== "false",
   /** Inactivité maximale côté serveur (le verrouillage écran côté client intervient avant). */

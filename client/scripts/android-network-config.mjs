@@ -1,14 +1,17 @@
-// Génère android/app/src/main/res/xml/network_security_config.xml à partir de CAP_SERVER_URL.
+// Génère android/app/src/main/res/xml/network_security_config.xml à partir de l'adresse du serveur.
 // Exécuté automatiquement après « npx cap sync » (script npm capacitor:sync:after).
 //  - HTTPS obligatoire partout (certificats système uniquement) ;
 //  - HTTP en clair autorisé UNIQUEMENT vers l'hôte du serveur RestoApp s'il est en http://
 //    (serveur du réseau local sans certificat). Recommandé : HTTPS, aucune exception.
 import { mkdirSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const target = resolve(dirname(fileURLToPath(import.meta.url)), "../android/app/src/main/res/xml/network_security_config.xml");
-const raw = process.env.CAP_SERVER_URL?.trim();
+// Même adresse que capacitor.config.ts (CAP_SERVER_URL, Codespace ou IP locale)
+const { resolveServerUrl } = createRequire(import.meta.url)("./server-url.cjs");
+const raw = resolveServerUrl()?.url ?? null;
 let cleartextHost = null;
 if (raw) {
   const url = new URL(raw);
@@ -18,7 +21,7 @@ if (raw) {
 const escape = (s) => s.replace(/[<>&"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const domain = cleartextHost
   ? `
-    <!-- Serveur RestoApp du réseau local en HTTP (CAP_SERVER_URL=${escape(raw)}) -->
+    <!-- Serveur THAONI APP du réseau local en HTTP (${escape(raw)}) -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">${escape(cleartextHost)}</domain>
     </domain-config>`

@@ -5,7 +5,7 @@ import { env } from "./lib/env.js";
 import { z } from "zod";
 import { parseCookie } from "cookie";
 import { ACCESS_COOKIE, authenticate, type AuthUser } from "./lib/auth.js";
-import { idSchema, isAllowedOrigin } from "./lib/security.js";
+import { idSchema, isAllowedOrigin, isTrustedOrigin } from "./lib/security.js";
 import type { Actor } from "./lib/audit.js";
 import { HttpError, toErrorPayload } from "./lib/errors.js";
 import { prisma } from "./lib/prisma.js";
@@ -288,7 +288,7 @@ async function withAck<T>(ack: unknown, fn: () => Promise<T>, lang: Lang = "fr")
 
 export function initRealtime(httpServer: HttpServer): IO {
   io = new Server(httpServer, {
-    cors: { origin: env.corsOrigin, credentials: true },
+    cors: { origin: (origin, cb) => cb(null, !origin || isTrustedOrigin(origin)), credentials: true },
     maxHttpBufferSize: 100_000, // aligné sur la limite des corps JSON de l'API
     // Anti « cross-site WebSocket hijacking » : origine vérifiée avant le handshake
     allowRequest: (req, cb) => {
