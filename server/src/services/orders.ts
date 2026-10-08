@@ -37,7 +37,7 @@ export const updateStatusSchema = z.object({
 });
 
 /** Options configurables d'un plat (champ JSON `MenuItem.options`). */
-const menuOptionsSchema = z
+export const menuOptionsSchema = z
   .object({
     cooking: z.array(z.string()).optional(),
     sides: z.array(z.string()).optional(),
@@ -104,7 +104,7 @@ export async function createOrder(raw: unknown, serverId: string): Promise<Order
 
     const lines = input.items.map((line) => {
       const item = byId.get(line.menuItemId);
-      if (!item) throw new HttpError(404, "Article introuvable dans la carte");
+      if (!item || item.isArchived) throw new HttpError(404, "Article introuvable dans la carte");
       if (!item.isAvailable) throw new HttpError(409, `« ${item.name} » n'est plus disponible`);
 
       const options = menuOptionsSchema.parse(item.options) ?? {};

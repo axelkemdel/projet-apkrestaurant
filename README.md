@@ -4,14 +4,14 @@ Application de gestion des commandes : prise de commande par les serveurs (table
 
 > **Étape 1** : schéma de BDD, API Express + Socket.io (`new_order`), Vue Serveur et Vue Cuisine.
 > **Module 2** : Caisse — additions par table, addition partagée (parts égales / par articles / acompte), Espèces avec rendu de monnaie, Carte, Orange Money, Telecel Cash, ticket thermique 80 mm.
-> Prochaine étape : Dashboard gérant (CRUD carte, statistiques, utilisateurs).
+> **Module 3** : Tableau de bord gérant — KPI et graphiques en temps réel, gestion de la carte (ruptures diffusées en direct, images), personnel et codes PIN.
 
 ## Stack
 
 | Couche | Choix |
 | --- | --- |
-| Frontend | React 19 + TypeScript, Vite, Tailwind CSS v4, Zustand, Lucide, Framer Motion |
-| Backend | Node.js, Express 5, Socket.io, Zod (validation), JWT (session par PIN) |
+| Frontend | React 19 + TypeScript, Vite, Tailwind CSS v4, Zustand, Lucide, Framer Motion, Recharts |
+| Backend | Node.js, Express 5, Socket.io, Zod (validation), JWT (session par PIN), Multer (images) |
 | Base de données | PostgreSQL + Prisma |
 
 ## Arborescence
@@ -24,6 +24,11 @@ server/
   src/realtime.ts           # salles, authentification socket, événements new_order / order_status
   src/services/orders.ts    # création de bon (prix recalculés côté serveur), cycle de vie KDS
   src/services/checkout.ts  # additions, soldes, versements, clôture de table, données du ticket
+  src/services/stats.ts     # KPI du jour, heures de pointe, plats stars (SQL agrégé, fuseau du restaurant)
+  src/services/adminMenu.ts # CRUD plats / catégories, ruptures, images
+  src/services/adminUsers.ts# personnel, rôles, codes PIN
+  src/lib/uploads.ts        # stockage des images (uploads/dishes/), contrôle du format
+  prisma/seed-demo.ts       # 30 jours d'historique de ventes pour le tableau de bord
   src/routes/*.ts           # API REST : auth, menu, tables, orders
 client/
   src/pages/Login.tsx       # connexion par profil + code PIN
@@ -31,6 +36,8 @@ client/
   src/pages/KitchenView.tsx # Vue Cuisine & Bar : kanban temps réel
   src/pages/CashierView.tsx # Vue Caisse : plan de salle, addition, encaissement
   src/components/cashier/   # FloorPlan, BillItems, PaymentPanel (split + clavier), Receipt (ticket 80 mm)
+  src/pages/AdminView.tsx   # Tableau de bord gérant (onglets Stats / Menu / Personnel)
+  src/components/admin/     # StatsTab (Recharts), MenuTab + MenuItemForm, StaffTab
   src/store/cart.ts         # panier (Zustand)
   src/lib/socket.ts         # client Socket.io typé
 ```
@@ -44,6 +51,7 @@ docker compose up -d                 # PostgreSQL local (resto / resto / restoap
 cp server/.env.example server/.env   # adapter DATABASE_URL et JWT_SECRET si besoin
 npm install
 npm run db:setup                     # migrations + données de démo
+npm run db:seed:demo -w server       # (facultatif) 30 jours d'historique pour les statistiques
 npm run dev                          # API sur :4000, front sur :5173
 ```
 
@@ -54,7 +62,7 @@ Ouvrez http://localhost:5173 (ou `http://<ip-du-poste>:5173` depuis une tablette
 | Awa / Issa (serveurs) | 1111 / 2222 | Vue Serveur |
 | Cuisine | 3333 | Vue Cuisine & Bar |
 | Caisse | 4444 | Vue Caisse |
-| Admin | 0000 | accès à tout (onglets Salle / Cuisine / Caisse) |
+| Admin | 0000 | Tableau de bord + accès à tout (onglets Salle / Cuisine / Caisse / Gérant) |
 
 Astuce démo : ouvrez la Vue Cuisine dans une fenêtre et la Vue Serveur dans une autre (navigation privée) ; la commande apparaît instantanément côté cuisine.
 
@@ -69,6 +77,7 @@ Chaque appareil se connecte avec son jeton JWT (`auth: { token }`) et rejoint la
 | serveur → clients | `new_order` | bon complet (table, serveur, lignes) |
 | serveur → clients | `order_updated` | bon mis à jour |
 | serveur → clients | `table_updated` | `{ id, number, status }` |
+| serveur → clients | `menu_updated` | `{ action, item? }` — rupture, plat ajouté / modifié / supprimé : les tablettes rechargent la carte |
 | serveur → clients | `payment_recorded` | `{ paymentId, tableId, orderIds, amount, remaining, closed }` |
 
 Règles métier côté serveur :
@@ -95,6 +104,16 @@ Règles métier côté serveur :
 | GET | `/api/checkout/order/:orderId` | CAISSE — addition d'un bon à emporter / livraison |
 | POST | `/api/checkout/pay` | CAISSE — enregistre un versement (voir ci-dessous) |
 | GET | `/api/checkout/receipt/:paymentId` | CAISSE — données structurées du ticket |
+| GET | `/api/admin/stats/daily?date=AAAA-MM-JJ` | ADMIN — CA (+ variation), commandes, panier moyen, encours, modes de paiement, activité par heure |
+| GET | `/api/admin/stats/top-items?period=day\|week\|month` | ADMIN — classement par volume et par valeur |
+| GET | `/api/admin/menu` | ADMIN — carte complète (plats masqués inclus) |
+| POST / PUT | `/api/admin/menu`, `/api/admin/menu/:id` | ADMIN — multipart : champs + `image` (fichier) ou `imageUrl` |
+| PATCH | `/api/admin/menu/:id/toggle-availability` | ADMIN — rupture de stock (bascule, ou `{ isAvailable }`) → `menu_updated` |
+| DELETE | `/api/admin/menu/:id` | ADMIN — refusé si le plat a déjà été commandé (le masquer) |
+| POST / PUT / DELETE | `/api/admin/categories[/:id]` | ADMIN — catégories (nom, écran Cuisine / Bar) |
+| GET / POST | `/api/admin/users` | ADMIN — personnel ; la création renvoie le PIN une seule fois |
+| PUT | `/api/admin/users/:id` | ADMIN — nom, rôle, activation |
+| PUT | `/api/admin/users/:id/pin` | ADMIN — réinitialise le PIN (saisi ou généré), renvoyé une seule fois |
 
 ## Modèle de données
 
@@ -134,3 +153,20 @@ Règles :
 **Parts égales** : quote-part = `ceil(reste / parts restantes)`, la dernière part tombe pile sur le solde. Le nombre de parts est retrouvé depuis les libellés « Part k/N » des versements, donc partagé entre caisses et conservé après rechargement.
 
 **Ticket** : composant `Receipt` au format 80 mm (zone utile 72 mm, police monospace). Le bouton « Imprimer / PDF » ouvre la boîte d'impression : choisir l'imprimante thermique (pilote EPSON TM / POS-80, papier 80 mm) ou « Enregistrer en PDF ». Option « Impression auto » dans l'en-tête de la caisse. L'en-tête du ticket (nom, adresse, téléphone, NIF, RCCM, message de pied) se règle dans `server/.env` (`RESTAURANT_*`).
+
+## Tableau de bord gérant (Module 3)
+
+**Statistiques** — calculées en SQL sur `Payment` et `Order`, journées et heures en heure locale du restaurant (`APP_TIMEZONE`, défaut `Africa/Ouagadougou`).
+- *Chiffre d'affaires* = montants encaissés. Pour la journée en cours, la variation est calculée face à **hier à la même heure** (comparer une journée entamée à une journée complète afficherait −100 % à l'ouverture).
+- *Panier moyen* = montant moyen d'une addition soldée (les bons d'une table soldés ensemble comptent pour une addition).
+- *Encours* = additions ouvertes non encaissées.
+- Le tableau de bord se rafraîchit seul à chaque encaissement ou nouveau bon (Socket.io).
+- Graphiques : CA par heure et bons par heure sont deux histogrammes distincts (pas de double axe). Les 4 modes de paiement utilisent une palette catégorielle vérifiée pour le daltonisme, avec libellés et montants affichés à côté de chaque couleur.
+
+**Carte** — interrupteur de rupture par plat (diffusé instantanément : le plat passe « Épuisé » sur les tablettes, avec une alerte si un serveur l'a dans son panier) ; masquage (le plat disparaît de la carte mais reste dans l'historique) ; suppression définitive uniquement pour un plat jamais commandé. Images : fichier JPEG/PNG/WebP de 3 Mo max, vérifié par sa signature binaire (pas le nom ni le type annoncé ; SVG refusé), enregistré sous un nom aléatoire dans `server/uploads/dishes/` et servi sous `/uploads/…` ; ou URL http(s) d'un CDN (Cloudinary…). L'ancienne image est supprimée du disque lorsqu'elle est remplacée.
+
+**Personnel & sécurité**
+- Les codes PIN sont **hachés (bcrypt)** : ni la base ni l'API ne peuvent les relire. Ils s'affichent une seule fois, à la création ou à la réinitialisation, pour être transmis à l'employé.
+- Réinitialiser le PIN, changer le rôle ou désactiver un employé **ferme immédiatement ses sessions** (jeton invalidé via `User.sessionVersion`, connexions temps réel coupées).
+- Anti force brute : 5 codes erronés sur un profil le verrouillent 5 minutes (levé par une réinitialisation du PIN).
+- Un gérant ne peut pas retirer son propre accès, et il reste toujours au moins un gérant actif.

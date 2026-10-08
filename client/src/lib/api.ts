@@ -14,7 +14,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`/api${path}`, {
     ...init,
     headers: {
-      "content-type": "application/json",
+      // FormData (upload d'image) : le navigateur fixe lui-même le boundary multipart
+      ...(!(init.body instanceof FormData) && { "content-type": "application/json" }),
       ...(token && { authorization: `Bearer ${token}` }),
       ...init.headers,
     },

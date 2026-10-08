@@ -23,6 +23,7 @@ export function AppHeader({ title, children, dark = false }: { title: string; ch
             ["/serveur", "Salle"],
             ["/cuisine", "Cuisine"],
             ["/caisse", "Caisse"],
+            ["/admin", "Gérant"],
           ].map(([to, label]) => (
             <NavLink
               key={to}

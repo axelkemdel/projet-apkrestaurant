@@ -80,16 +80,25 @@ export function MenuBrowser({
                 onClick={() => (hasOptions(item) ? onCustomize(item) : onQuickAdd(item))}
                 className="flex flex-1 flex-col text-left disabled:cursor-not-allowed"
               >
+                {item.imageUrl && (
+                  <img
+                    src={item.imageUrl}
+                    alt=""
+                    loading="lazy"
+                    className="-mx-3 -mt-3 mb-2 h-24 w-[calc(100%+1.5rem)] max-w-none rounded-t-2xl object-cover"
+                    onError={(e) => (e.currentTarget.style.display = "none")}
+                  />
+                )}
                 <span className="pr-8 font-semibold leading-tight">{item.name}</span>
                 {item.description && <span className="mt-1 line-clamp-2 text-xs text-slate-500">{item.description}</span>}
                 <span className="mt-auto pt-2 font-bold text-brand-600">
-                  {unavailable ? "Épuisé" : formatPrice(item.price)}
+                  {unavailable ? <span className="rounded-md bg-slate-800 px-2 py-0.5 text-xs uppercase text-white">Épuisé</span> : formatPrice(item.price)}
                 </span>
               </button>
               {!unavailable && (
                 <button
                   onClick={() => onCustomize(item)}
-                  className="absolute right-2 top-2 rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-slate-500 shadow-sm hover:bg-slate-100 hover:text-slate-700"
                   aria-label={`Personnaliser ${item.name}`}
                 >
                   {hasOptions(item) ? <SlidersHorizontal size={16} /> : <Plus size={16} />}

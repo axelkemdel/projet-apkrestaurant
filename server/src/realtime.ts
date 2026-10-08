@@ -2,7 +2,7 @@ import type { Server as HttpServer } from "node:http";
 import { Server, type Socket } from "socket.io";
 import type { Table } from "@prisma/client";
 import { env } from "./lib/env.js";
-import { verifyToken, type AuthUser } from "./lib/auth.js";
+import { authenticate, type AuthUser } from "./lib/auth.js";
 import { HttpError, toErrorPayload } from "./lib/errors.js";
 import { createOrder, updateOrderStatus, type OrderWithRelations } from "./services/orders.js";
 import type { PayResult } from "./services/checkout.js";
@@ -20,12 +20,19 @@ import { releaseTableIfIdle } from "./services/tables.js";
  *   - `order_updated` : changement de statut d'un bon
  *   - `table_updated` : changement de statut d'une table
  *   - `payment_recorded` : versement encaissé (solde restant, addition close ou non)
+ *   - `menu_updated`  : carte modifiée (rupture de stock, plat ajouté / modifié / supprimé)
  */
 export interface ServerToClientEvents {
   new_order: (order: OrderWithRelations) => void;
   order_updated: (order: OrderWithRelations) => void;
   table_updated: (table: Pick<Table, "id" | "number" | "status">) => void;
   payment_recorded: (event: PaymentEvent) => void;
+  menu_updated: (event: MenuEvent) => void;
+}
+
+export interface MenuEvent {
+  action: "created" | "updated" | "deleted" | "availability" | "categories";
+  item?: { id: string; name: string; isAvailable: boolean; isArchived: boolean };
 }
 
 export interface PaymentEvent {
@@ -67,6 +74,13 @@ const roomsByRole: Record<AuthUser["role"], string[]> = {
 
 let io: IO | undefined;
 
+const userRoom = (userId: string) => `user:${userId}`;
+
+/** Coupe les connexions temps réel d'un employé (PIN réinitialisé, compte désactivé…). */
+export function disconnectUser(userId: string) {
+  getIO().in(userRoom(userId)).disconnectSockets(true);
+}
+
 export function getIO(): IO {
   if (!io) throw new Error("Socket.io n'est pas initialisé");
   return io;
@@ -86,6 +100,11 @@ export async function broadcastOrderUpdated(order: OrderWithRelations) {
     const table = await releaseTableIfIdle(order.tableId);
     if (table) getIO().emit("table_updated", { id: table.id, number: table.number, status: table.status });
   }
+}
+
+/** Carte modifiée (rupture, prix, nouveau plat…) : toutes les tablettes rechargent la carte. */
+export function broadcastMenuUpdated(event: MenuEvent) {
+  getIO().emit("menu_updated", event);
 }
 
 /** Après un encaissement : caisses, serveurs et KDS sont mis à jour ; la table libérée est diffusée à tous. */
@@ -128,11 +147,11 @@ export function initRealtime(httpServer: HttpServer): IO {
   io = new Server(httpServer, { cors: { origin: env.corsOrigin } });
 
   // Authentification à la connexion : le jeton JWT obtenu via /api/auth/login
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token;
     if (typeof token !== "string") return next(new Error("Authentification requise"));
     try {
-      socket.data.user = verifyToken(token);
+      socket.data.user = await authenticate(token);
       next();
     } catch {
       next(new Error("Session expirée"));
@@ -141,7 +160,7 @@ export function initRealtime(httpServer: HttpServer): IO {
 
   io.on("connection", (socket: Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>) => {
     const { user } = socket.data;
-    socket.join(roomsByRole[user.role]);
+    socket.join([...roomsByRole[user.role], userRoom(user.id)]);
 
     socket.on("new_order", (payload, ack) =>
       withAck(ack, async () => {

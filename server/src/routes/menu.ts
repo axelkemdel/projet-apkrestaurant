@@ -4,11 +4,11 @@ import { requireAuth } from "../lib/auth.js";
 
 export const menuRouter = Router();
 
-/** Carte complète, catégories ordonnées. Les plats indisponibles sont renvoyés (affichés grisés). */
+/** Carte des serveurs : plats masqués exclus, plats en rupture renvoyés (affichés « Épuisé »). */
 menuRouter.get("/", requireAuth(), async (_req, res) => {
   const categories = await prisma.category.findMany({
     orderBy: { order: "asc" },
-    include: { items: { orderBy: { name: "asc" } } },
+    include: { items: { where: { isArchived: false }, orderBy: { name: "asc" } } },
   });
   res.json(categories);
 });

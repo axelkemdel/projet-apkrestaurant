@@ -30,9 +30,21 @@ export function ServerView() {
     const load = () => api<Category[]>("/menu").then(setCategories).catch((e) => toast.error(e.message));
     void load();
     const socket = getSocket();
+    // Rupture de stock / modification de la carte par le gérant : mise à jour instantanée
+    const onMenu = (event: { action: string; item?: { id: string; name: string; isAvailable: boolean } }) => {
+      void load();
+      if (event.action !== "availability" || !event.item) return;
+      const { id, name, isAvailable } = event.item;
+      if (isAvailable) return toast.info(`${name} est de nouveau disponible`);
+      const inCart = useCart.getState().lines.some((l) => l.item.id === id);
+      if (inCart) toast.error(`${name} est épuisé : retirez-le du panier`);
+      else toast.info(`${name} est épuisé`);
+    };
     socket.on("connect", load);
+    socket.on("menu_updated", onMenu);
     return () => {
       socket.off("connect", load);
+      socket.off("menu_updated", onMenu);
     };
   }, []);
 

@@ -4,15 +4,16 @@ import { Login } from "./pages/Login";
 import { ServerView } from "./pages/ServerView";
 import { KitchenView } from "./pages/KitchenView";
 import { CashierView } from "./pages/CashierView";
+import { AdminView } from "./pages/AdminView";
 import { Toaster } from "./components/Toasts";
 import type { Role } from "./types";
 
-/** Écran d'accueil par rôle (le tableau de bord gérant arrive dans une prochaine étape). */
+/** Écran d'accueil par rôle. */
 const homeByRole: Record<Role, string> = {
   SERVEUR: "/serveur",
   CUISINE: "/cuisine",
   CAISSE: "/caisse",
-  ADMIN: "/caisse",
+  ADMIN: "/admin",
 };
 
 function Guard({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
@@ -49,6 +50,14 @@ export function App() {
           element={
             <Guard roles={["CAISSE"]}>
               <CashierView />
+            </Guard>
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <Guard roles={["ADMIN"]}>
+              <AdminView />
             </Guard>
           }
         />

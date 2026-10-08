@@ -52,12 +52,14 @@ enum PaymentMode {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String
-  role      Role
-  pinHash   String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  name           String
+  role           Role
+  pinHash        String
+  isActive       Boolean  @default(true)
+  // Incrémenté à chaque changement de PIN / rôle / désactivation : invalide les sessions ouvertes
+  sessionVersion Int      @default(0)
+  createdAt      DateTime @default(now())
 
   orders   Order[]
   payments Payment[]
@@ -89,7 +91,9 @@ model MenuItem {
   description String?
   price       Int
   categoryId  String
-  isAvailable Boolean  @default(true)
+  isAvailable Boolean  @default(true) // false = rupture de stock (affiché « Épuisé »)
+  isArchived  Boolean  @default(false) // masqué de la carte (conservé pour l'historique)
+  imageUrl    String? // /uploads/dishes/… (téléversé) ou URL externe (CDN)
   // Options de personnalisation :
   // { "cooking": ["Saignant", "À point"], "sides": ["Frites", "Riz"], "extras": [{ "name": "Fromage", "price": 500 }] }
   options     Json?

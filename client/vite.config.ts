@@ -10,6 +10,7 @@ export default defineConfig({
     host: true, // accessible depuis les tablettes du réseau local
     proxy: {
       "/api": API,
+      "/uploads": API,
       "/socket.io": { target: API, ws: true },
     },
   },

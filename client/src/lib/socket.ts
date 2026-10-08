@@ -7,6 +7,10 @@ interface ServerToClient {
   new_order: (order: Order) => void;
   order_updated: (order: Order) => void;
   table_updated: (table: Pick<Table, "id" | "number" | "status">) => void;
+  menu_updated: (event: {
+    action: "created" | "updated" | "deleted" | "availability" | "categories";
+    item?: { id: string; name: string; isAvailable: boolean; isArchived: boolean };
+  }) => void;
   payment_recorded: (event: { paymentId: string; tableId: string | null; orderIds: string[]; amount: number; remaining: number; closed: boolean }) => void;
 }
 
@@ -31,6 +35,11 @@ export function getSocket(): AppSocket {
   socket = io({ auth: { token }, transports: ["websocket", "polling"] });
   socket.on("connect_error", (err) => {
     if (err.message === "Session expirée") useAuth.getState().logout();
+  });
+  // Déconnexion forcée par le serveur (PIN réinitialisé, compte désactivé…) : on retente
+  // une connexion ; si la session a été révoquée, connect_error déclenche la déconnexion.
+  socket.on("disconnect", (reason) => {
+    if (reason === "io server disconnect") socket?.connect();
   });
   return socket;
 }
