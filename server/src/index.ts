@@ -12,6 +12,7 @@ import { checkoutRouter } from "./routes/checkout.js";
 import { adminRouter } from "./routes/admin.js";
 import { UPLOADS_DIR } from "./lib/uploads.js";
 import { applySecurity } from "./lib/security.js";
+import { langOf, translate } from "./lib/i18n.js";
 
 const app = express();
 // helmet, CORS sans joker, cookies, limitation de débit, contrôle d'origine (anti-CSRF)
@@ -37,8 +38,8 @@ app.use(
     setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
   }),
 );
-app.use("/api", (_req, res) => {
-  res.status(404).json({ error: "Route introuvable" });
+app.use("/api", (req, res) => {
+  res.status(404).json({ code: "http.notFound", error: translate(langOf(req), "http.notFound") });
 });
 app.use(errorHandler);
 

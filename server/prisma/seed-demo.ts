@@ -33,8 +33,8 @@ async function main() {
   // Popularité inégale : quelques plats stars
   const dishes = items.filter((i) => i.category.station === "KITCHEN");
   const drinks = items.filter((i) => i.category.station === "BAR");
-  const weighted = <T extends { name: string }>(list: T[]) =>
-    list.flatMap((i, idx) => Array(Math.max(1, list.length - idx + (/Poulet|Bissap|Brakina|Alloco/.test(i.name) ? 6 : 0))).fill(i) as T[]);
+  const weighted = <T extends { nameFr: string }>(list: T[]) =>
+    list.flatMap((i, idx) => Array(Math.max(1, list.length - idx + (/Poulet|Bissap|Brakina|Alloco/.test(i.nameFr) ? 6 : 0))).fill(i) as T[]);
   const dishPool = weighted(dishes);
   const drinkPool = weighted(drinks);
 
@@ -71,7 +71,8 @@ async function main() {
 
       const data = [...lines.values()].map((l) => ({
         menuItemId: l.item.id,
-        name: l.item.name,
+        nameFr: l.item.nameFr,
+        nameEn: l.item.nameEn,
         quantity: l.quantity,
         paidQuantity: l.quantity,
         unitPrice: l.item.price,
@@ -82,6 +83,7 @@ async function main() {
       const order = await prisma.order.create({
         data: {
           type: takeaway ? "TAKEAWAY" : "DINE_IN",
+          language: rand() < 0.17 ? "EN" : "FR",
           tableId: takeaway ? null : pick(tables).id,
           serverId: pick(servers).id,
           status: "PAID",

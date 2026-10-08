@@ -1,8 +1,15 @@
-const fcfa = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 });
+import { currentLang } from "../i18n";
 
-/** 12500 → "12 500 F" */
+// Formats dépendant de la langue de l'écran (séparateurs de milliers, heures…)
+const locale = () => (currentLang() === "en" ? "en-GB" : "fr-FR");
+
+/** 12500 → « 12 500 F » (fr) / « 12,500 F » (en) */
 export function formatPrice(amount: number): string {
-  return `${fcfa.format(amount)} F`;
+  return `${new Intl.NumberFormat(locale(), { maximumFractionDigits: 0 }).format(amount)} F`;
+}
+
+export function formatNumber(n: number): string {
+  return new Intl.NumberFormat(locale()).format(n);
 }
 
 /** Minutes écoulées depuis une date ISO. */
@@ -18,23 +25,9 @@ export function formatElapsed(iso: string, now: number): string {
 }
 
 export function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString(locale(), { hour: "2-digit", minute: "2-digit" });
 }
 
-export const roleLabel = {
-  ADMIN: "Gérant",
-  SERVEUR: "Serveur",
-  CUISINE: "Cuisine / Bar",
-  CAISSE: "Caisse",
-} as const;
-
-export const paymentModeLabel = {
-  CASH: "Espèces",
-  CARD: "Carte bancaire",
-  ORANGE_MONEY: "Orange Money",
-  TELECEL_CASH: "Telecel Cash",
-} as const;
-
-export function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+export function formatDateTime(iso: string, lang?: "fr" | "en"): string {
+  return new Date(iso).toLocaleString(lang ? (lang === "en" ? "en-GB" : "fr-FR") : locale(), { dateStyle: "short", timeStyle: "short" });
 }

@@ -46,7 +46,7 @@ const h = (await call(A, "/auth/me"))._h;
 ok(h.get("content-security-policy")?.includes("default-src 'none'") && h.get("x-content-type-options") === "nosniff" && !h.get("x-powered-by"), "en-têtes helmet");
 const evil = await fetch(`${API}/auth/me`, { headers: { origin: "https://evil.example", cookie: A } });
 ok(!evil.headers.get("access-control-allow-origin"), "CORS : origine inconnue sans ACAO");
-ok((await call(A, "/admin/categories", { name: "X", station: "BAR" }, "POST", { origin: "https://evil.example" })).s === 403, "CSRF : POST d'une origine étrangère refusé");
+ok((await call(A, "/admin/categories", { nameFr: "X", nameEn: "X", station: "BAR" }, "POST", { origin: "https://evil.example" })).s === 403, "CSRF : POST d'une origine étrangère refusé");
 ok((await loginRaw("Awa", "1111", { admin: true })).r.status === 400, "Zod strict : champ inconnu au login refusé");
 ok((await call(A, "/checkout/table/..%2F..%2Fetc")).s === 400, "paramètre d'URL invalide refusé (400)");
 ok((await call(A, "/admin/stats/top-items?period=year")).s === 400, "query invalide refusée");
@@ -61,7 +61,7 @@ const ks = io("http://localhost:4000", { transports: ["websocket"], extraHeaders
 await new Promise(r => ks.on("connect", r)); ok(true, "socket cuisine authentifié par cookie");
 ok(/invalides|Identifiant/.test((await ks.emitWithAck("order_status", { orderId: "x", status: "PAID", extra: 1 })).error), "payload socket validé par Zod");
 // Annulation auditée
-const menu = (await call(W, "/menu")).flatMap(c => c.items); const it = n => menu.find(i => i.name.startsWith(n)).id;
+const menu = (await call(W, "/menu")).flatMap(c => c.items); const it = n => menu.find(i => i.nameFr.startsWith(n)).id;
 const tables = await call(W, "/tables");
 const o = await call(W, "/orders", { tableId: tables[0].id, items: [{ menuItemId: it("Poulet"), quantity: 1, side: "Riz" }] });
 ok((await ks.emitWithAck("order_status", { orderId: o.id, status: "CANCELLED" })).ok, "annulation via socket");
@@ -81,7 +81,7 @@ ok(d.s === 201 && d.closed && !d.tableReleased, "remise gérant soldant l'additi
 const rec = await call(C, `/checkout/receipt/${pay.paymentId}`);
 ok(rec.totals.discounted === 1840 && rec.discounts.length === 1 && rec.totals.remainingAfter === 6560, "ticket : remise antérieure affichée");
 // Prix, PIN, upload
-const entrecote = (await call(A, "/admin/menu")).flatMap(c => c.items).find(i => i.name.startsWith("Entrecôte"));
+const entrecote = (await call(A, "/admin/menu")).flatMap(c => c.items).find(i => i.nameFr.startsWith("Entrecôte"));
 const fd = new FormData(); fd.set("price", "9000");
 ok((await call(A, `/admin/menu/${entrecote.id}`, fd, "PUT")).price === 9000, "prix modifié");
 const svg = new FormData(); svg.set("image", new Blob(["<svg onload=alert(1)>"], { type: "image/svg+xml" }), "x.svg");

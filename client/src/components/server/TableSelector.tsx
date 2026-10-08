@@ -4,17 +4,22 @@ import { Loader2, ShoppingBag, Users } from "lucide-react";
 import { api } from "../../lib/api";
 import { getSocket } from "../../lib/socket";
 import type { Table, TableStatus } from "../../types";
+import { useTranslation } from "react-i18next";
+import { zoneName } from "../../lib/localize";
 
-const statusStyle: Record<TableStatus, { label: string; card: string; dot: string }> = {
-  FREE: { label: "Libre", card: "border-emerald-200 bg-white hover:border-emerald-400", dot: "bg-emerald-500" },
-  OCCUPIED: { label: "Occupée", card: "border-brand-300 bg-brand-50 hover:border-brand-500", dot: "bg-brand-500" },
-  RESERVED: { label: "Réservée", card: "border-sky-200 bg-sky-50 hover:border-sky-400", dot: "bg-sky-500" },
+const statusStyle: Record<TableStatus, { card: string; dot: string }> = {
+  FREE: { card: "border-emerald-200 bg-white hover:border-emerald-400", dot: "bg-emerald-500" },
+  OCCUPIED: { card: "border-brand-300 bg-brand-50 hover:border-brand-500", dot: "bg-brand-500" },
+  RESERVED: { card: "border-sky-200 bg-sky-50 hover:border-sky-400", dot: "bg-sky-500" },
 };
+
+const ALL_ZONES = "*";
 
 export function TableSelector({ onSelect, onTakeaway }: { onSelect: (t: Table) => void; onTakeaway: () => void }) {
   const [tables, setTables] = useState<Table[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [zone, setZone] = useState<string>("Toutes");
+  const { t } = useTranslation();
+  const [zone, setZone] = useState<string>(ALL_ZONES);
 
   useEffect(() => {
     const load = () =>
@@ -34,8 +39,8 @@ export function TableSelector({ onSelect, onTakeaway }: { onSelect: (t: Table) =
     };
   }, []);
 
-  const zones = useMemo(() => ["Toutes", ...new Set(tables?.map((t) => t.zone))], [tables]);
-  const visible = tables?.filter((t) => zone === "Toutes" || t.zone === zone) ?? [];
+  const zones = useMemo(() => [ALL_ZONES, ...new Set(tables?.map((tb) => tb.zone))], [tables]);
+  const visible = tables?.filter((tb) => zone === ALL_ZONES || tb.zone === zone) ?? [];
 
   if (error) return <p className="p-6 text-red-600">{error}</p>;
   if (!tables)
@@ -56,14 +61,14 @@ export function TableSelector({ onSelect, onTakeaway }: { onSelect: (t: Table) =
               zone === z ? "bg-slate-900 text-white" : "bg-white text-slate-600 hover:bg-slate-200"
             }`}
           >
-            {z}
+            {z === ALL_ZONES ? t("floor.allZones") : zoneName(z, t)}
           </button>
         ))}
         <div className="flex-1" />
         <div className="flex gap-3 text-xs text-slate-500">
           {Object.entries(statusStyle).map(([k, s]) => (
             <span key={k} className="flex items-center gap-1">
-              <span className={`h-2 w-2 rounded-full ${s.dot}`} /> {s.label}
+              <span className={`h-2 w-2 rounded-full ${s.dot}`} /> {t(`tableStatus.${k as TableStatus}`)}
             </span>
           ))}
         </div>
@@ -76,26 +81,26 @@ export function TableSelector({ onSelect, onTakeaway }: { onSelect: (t: Table) =
           className="flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-slate-300 bg-white text-slate-600 hover:border-slate-500"
         >
           <ShoppingBag />
-          <span className="text-sm font-semibold">À emporter</span>
+          <span className="text-sm font-semibold">{t("common.takeaway")}</span>
         </motion.button>
 
-        {visible.map((t) => {
-          const s = statusStyle[t.status];
+        {visible.map((tb) => {
+          const s = statusStyle[tb.status];
           return (
             <motion.button
-              key={t.id}
+              key={tb.id}
               whileTap={{ scale: 0.95 }}
-              onClick={() => onSelect(t)}
+              onClick={() => onSelect(tb)}
               className={`relative flex aspect-square flex-col items-center justify-center rounded-2xl border-2 transition-colors ${s.card}`}
             >
               <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full ${s.dot}`} />
-              <span className="text-3xl font-bold">{t.number}</span>
+              <span className="text-3xl font-bold">{tb.number}</span>
               <span className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                <Users size={12} /> {t.capacity}
+                <Users size={12} /> {tb.capacity}
               </span>
-              {t.openOrders > 0 && (
+              {tb.openOrders > 0 && (
                 <span className="mt-1 text-[11px] font-medium text-brand-700">
-                  {t.openOrders} bon{t.openOrders > 1 ? "s" : ""}
+                  {t("floor.openTickets", { count: tb.openOrders })}
                 </span>
               )}
             </motion.button>

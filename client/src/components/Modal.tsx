@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useIsPhone } from "../lib/useMediaQuery";
 
 /**
@@ -20,6 +21,7 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const { t } = useTranslation();
   const isPhone = useIsPhone();
   const drag = useDragControls();
 
@@ -61,7 +63,7 @@ export function Modal({
               onPointerDown={(e) => isPhone && drag.start(e)}
             >
               <div className="min-w-0 text-lg font-semibold">{title}</div>
-              <button onClick={onClose} className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-slate-100" aria-label="Fermer">
+              <button onClick={onClose} className="-m-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg hover:bg-slate-100" aria-label={t("common.close")}>
                 <X size={20} />
               </button>
             </div>

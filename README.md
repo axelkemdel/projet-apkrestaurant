@@ -5,13 +5,14 @@ Application de gestion des commandes : prise de commande par les serveurs (table
 > **Étape 1** : schéma de BDD, API Express + Socket.io (`new_order`), Vue Serveur et Vue Cuisine.
 > **Module 2** : Caisse — additions par table, addition partagée (parts égales / par articles / acompte), Espèces avec rendu de monnaie, Carte, Orange Money, Telecel Cash, ticket thermique 80 mm.
 > **Module 3** : Tableau de bord gérant — KPI et graphiques en temps réel, gestion de la carte (ruptures diffusées en direct, images), personnel et codes PIN.
+> **Module 5** : Multilingue FR / EN — interface intégralement traduite (sélecteur sur tous les écrans), carte et bons bilingues, bascule de traduction des bons en cuisine et en caisse, tickets dans la langue du client, erreurs serveur traduites.
 > **Module 4** : Sécurité & responsive — session en cookie HttpOnly, verrouillage après inactivité, helmet / CORS / anti-CSRF / limitation de débit, validation Zod stricte, remises plafonnées, journal d'audit anti-fraude en ajout seul, recadrage d'images, interface mobile-first (barre d'onglets, tiroirs, cibles de 48 px).
 
 ## Stack
 
 | Couche | Choix |
 | --- | --- |
-| Frontend | React 19 + TypeScript, Vite, Tailwind CSS v4, Zustand, Lucide, Framer Motion, Recharts |
+| Frontend | React 19 + TypeScript, Vite, Tailwind CSS v4, Zustand, Lucide, Framer Motion, Recharts, i18next / react-i18next |
 | Backend | Node.js, Express 5, Socket.io, Zod (validation stricte), JWT en cookie HttpOnly, Helmet, express-rate-limit, Multer (images) |
 | Base de données | PostgreSQL + Prisma |
 
@@ -73,7 +74,8 @@ Chaque appareil s'authentifie au handshake avec son cookie de session HttpOnly (
 
 | Sens | Événement | Contenu |
 | --- | --- | --- |
-| client → serveur | `new_order` | `{ type, tableId?, items: [{ menuItemId, quantity, cooking?, side?, extras[], notes? }] }` + accusé `{ ok, data \| error }` |
+| client → serveur | `new_order` | `{ type, language: FR\|EN, tableId?, items: [{ menuItemId, quantity, cooking?, side?, extras[], quickNotes[], notes? }] }` + accusé `{ ok, data \| error }` |
+| client → serveur | `set_lang` | `"fr" \| "en"` — langue des erreurs renvoyées dans les accusés |
 | client → serveur | `order_status` | `{ orderId, status: PREPARING \| READY \| SERVED \| CANCELLED }` + accusé |
 | serveur → clients | `new_order` | bon complet (table, serveur, lignes) |
 | serveur → clients | `order_updated` | bon mis à jour |
@@ -96,7 +98,7 @@ Règles métier côté serveur :
 | POST | `/api/auth/login` | public — `{ userId, pin }` → `{ user }` + cookie de session HttpOnly ; 5 essais / 5 min par profil |
 | GET | `/api/auth/me` | session en cours (`{ user: null }` si aucune) |
 | POST | `/api/auth/logout` | efface le cookie de session |
-| GET | `/api/menu` | connecté |
+| GET | `/api/menu` | connecté — carte bilingue (`nameFr`/`nameEn`, options `{ fr, en }`) |
 | GET | `/api/tables` | connecté |
 | GET | `/api/tables/:id/orders` | connecté — bons ouverts de la table |
 | GET | `/api/orders/active` | connecté — bons PENDING / PREPARING / READY |
@@ -212,3 +214,22 @@ Règles :
 | Smartphone (< 640 px) | barre d'onglets inférieure (Stats, Menu, Équipe, Audit, Écrans), une colonne, cartes tactiles au lieu des tableaux, formulaires en tiroir glissable (fermeture par glissement vers le bas) |
 | Tablette / caisse tactile (640–1024 px) | barre latérale rétractable (icônes ↔ libellés), grilles de 2 colonnes, cibles tactiles ≥ 48 px |
 | Grand écran (> 1024 px) | barre latérale dépliée, contenu centré `max-w-7xl`, KPI sur 4 colonnes à partir de 1280 px |
+
+## Multilingue FR / EN (Module 5)
+
+**Interface** — `i18next` + `react-i18next`, dictionnaires `client/src/i18n/fr.ts` et `en.ts` (≈ 410 clés). Les clés sont **typées** : une clé inconnue ou absente de l'anglais est une erreur de compilation. Sélecteur FR / EN sur chaque écran (connexion, verrouillage, serveur, cuisine, caisse, gérant), mémorisé par appareil ; langue par défaut du restaurant : `VITE_DEFAULT_LANG` (français par défaut — la langue du navigateur n'est volontairement pas utilisée, beaucoup de tablettes étant réglées en anglais). Montants, dates, heures et pourcentages sont formatés selon la langue (« 12 500 F » / « 12,500 F », « 15 % » / « 15% »).
+
+**Carte bilingue** — `MenuItem.nameFr / nameEn / descriptionFr / descriptionEn`, `Category.nameFr / nameEn`, et options en paires `{ fr, en }` (cuissons, accompagnements, suppléments). Le français est la valeur de référence transmise par les tablettes. Le gérant saisit les deux langues côte à côte ; la recherche fonctionne dans les deux langues.
+
+**Bons de commande et bascule de traduction**
+- Chaque bon enregistre la langue de prise de commande (`Order.language`) et une copie figée bilingue des noms (`OrderItem.nameFr / nameEn`) et des options.
+- Les notes rapides sont des **codes** (`NO_ONION`, `EXTRA_SPICY`, `PEANUT_ALLERGY`…) traduits à l'affichage : « No onions » devient « Sans oignon » en cuisine.
+- Le **texte libre** saisi par le serveur n'est pas traduit automatiquement (aucun service de traduction externe) : il est affiché tel quel, signalé « texte libre, non traduit ».
+- **Cuisine (KDS)** : réglage de l'écran « Bons en FR / EN » (langue de l'écran) ou « Langue d'origine », badge EN sur les bons pris en anglais, et bouton « Voir en français / Voir en anglais » sur chaque bon.
+- **Caisse** : bascule FR / EN des articles de l'addition ; le **ticket** est édité par défaut dans la langue du client (langue de prise de commande), avec un choix FR / EN avant impression. Les motifs de remise proposés et les libellés de versement (« Part 2/4 », « Acompte ») sont traduits.
+
+**API** — les erreurs sont des **codes stables** traduits selon l'en-tête `Accept-Language` envoyé par l'écran : `{ "code": "order.itemUnavailable", "error": "“Grilled chicken” is no longer available" }` (le nom du plat suit aussi la langue). Les messages de validation Zod personnalisés, les limites de débit et les erreurs Socket.io (langue déclarée au handshake, puis `set_lang`) le sont également.
+
+**Migration** — `20261008180000_bilingual_menu` renomme les colonnes existantes (pas de `DROP`) et initialise l'anglais avec le français : compléter ensuite les libellés anglais dans « Gestion du menu ». Les options déjà stockées en format monolingue sont lues automatiquement comme `{ fr, en }`.
+
+**Vérification** — `npm run test:i18n -w server` (API démarrée, base de démo fraîche).

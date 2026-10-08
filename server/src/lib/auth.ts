@@ -71,23 +71,23 @@ export function endSession(res: Response) {
  * un employé désactivé, dont le PIN ou le rôle a changé, perd immédiatement l'accès.
  */
 export async function authenticate(token: string | undefined): Promise<{ user: AuthUser; claims: SessionClaims }> {
-  if (!token) throw new HttpError(401, "Authentification requise");
+  if (!token) throw new HttpError(401, "auth.required");
   let claims: SessionClaims;
   try {
     claims = jwt.verify(token, env.jwtSecret, { algorithms: ["HS256"] }) as SessionClaims;
   } catch {
-    throw new HttpError(401, "Session expirée, reconnectez-vous");
+    throw new HttpError(401, "auth.expired");
   }
   const user = await prisma.user.findUnique({
     where: { id: claims.id },
     select: { id: true, name: true, role: true, isActive: true, sessionVersion: true },
   });
   if (!user || !user.isActive || user.sessionVersion !== claims.sv) {
-    throw new HttpError(401, "Session expirée, reconnectez-vous");
+    throw new HttpError(401, "auth.expired");
   }
   const idleMs = Date.now() - (claims.iat ?? 0) * 1000;
   if (user.role !== "CUISINE" && idleMs > env.sessionIdleMinutes * 60_000) {
-    throw new HttpError(401, "Session expirée après inactivité");
+    throw new HttpError(401, "auth.idleExpired");
   }
   return { user: { id: user.id, name: user.name, role: user.role }, claims };
 }
@@ -102,13 +102,13 @@ export function requireAuth(...roles: Role[]): RequestHandler {
       setCookie(res, sign({ id: claims.id, sv: claims.sv, abs: claims.abs }), claims.abs);
     }
     if (roles.length && user.role !== "ADMIN" && !roles.includes(user.role)) {
-      throw new HttpError(403, "Accès refusé pour ce rôle");
+      throw new HttpError(403, "auth.forbiddenRole");
     }
     next();
   };
 }
 
 export function actorOf(req: Request): Actor {
-  if (!req.user) throw new HttpError(401, "Authentification requise");
+  if (!req.user) throw new HttpError(401, "auth.required");
   return { ...req.user, ip: req.ip ?? null };
 }

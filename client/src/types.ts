@@ -5,6 +5,15 @@ export type TableStatus = "FREE" | "OCCUPIED" | "RESERVED";
 export type OrderStatus = "PENDING" | "PREPARING" | "READY" | "SERVED" | "PAID" | "CANCELLED";
 export type OrderType = "DINE_IN" | "TAKEAWAY" | "DELIVERY";
 export type Station = "KITCHEN" | "BAR";
+export type Lang = "fr" | "en";
+/** Langue de prise de commande, telle que stockée côté serveur */
+export type OrderLanguage = "FR" | "EN";
+
+/** Libellé bilingue d'une option (le français est la valeur de référence envoyée au serveur). */
+export interface Label {
+  fr: string;
+  en: string;
+}
 
 export interface User {
   id: string;
@@ -21,21 +30,35 @@ export interface Table {
   openOrders: number;
 }
 
-export interface Extra {
-  name: string;
+export interface Extra extends Label {
   price: number;
 }
 
 export interface MenuOptions {
-  cooking?: string[];
-  sides?: string[];
+  cooking?: Label[];
+  sides?: Label[];
   extras?: Extra[];
 }
 
+/** Codes des notes rapides (traduits côté écran) — miroir de QUICK_NOTES côté serveur. */
+export const QUICK_NOTES = [
+  "NO_ONION",
+  "NO_CHILI",
+  "EXTRA_SPICY",
+  "SAUCE_ON_SIDE",
+  "NO_SALT",
+  "PEANUT_ALLERGY",
+  "GLUTEN_FREE",
+  "NO_ICE",
+] as const;
+export type QuickNote = (typeof QUICK_NOTES)[number];
+
 export interface MenuItem {
   id: string;
-  name: string;
-  description: string | null;
+  nameFr: string;
+  nameEn: string;
+  descriptionFr: string | null;
+  descriptionEn: string | null;
   price: number;
   categoryId: string;
   isAvailable: boolean;
@@ -46,24 +69,28 @@ export interface MenuItem {
 
 export interface Category {
   id: string;
-  name: string;
+  nameFr: string;
+  nameEn: string;
   order: number;
   station: Station;
   items: MenuItem[];
 }
 
+/** Options figées sur une ligne de bon (anciennes commandes : libellés simples). */
 export interface OrderItemModifiers {
-  cooking?: string;
-  side?: string;
-  extras?: Extra[];
+  cooking?: Label | string;
+  side?: Label | string;
+  extras?: (Extra | { name: string; price: number })[];
 }
 
 export interface OrderItem {
   id: string;
   menuItemId: string;
-  name: string;
+  nameFr: string;
+  nameEn: string;
   quantity: number;
   unitPrice: number;
+  quickNotes: QuickNote[];
   notes: string | null;
   modifiers: OrderItemModifiers | null;
   station: Station;
@@ -76,6 +103,7 @@ export interface Order {
   status: OrderStatus;
   totalAmount: number;
   customerNote: string | null;
+  language: OrderLanguage;
   createdAt: string;
   startedAt: string | null;
   readyAt: string | null;
@@ -89,6 +117,7 @@ export interface NewOrderLine {
   menuItemId: string;
   quantity: number;
   notes?: string;
+  quickNotes: QuickNote[];
   cooking?: string;
   side?: string;
   extras: string[];
@@ -96,6 +125,7 @@ export interface NewOrderLine {
 
 export interface NewOrderPayload {
   type: OrderType;
+  language: OrderLanguage;
   tableId?: string;
   customerNote?: string;
   items: NewOrderLine[];
@@ -181,16 +211,18 @@ export interface PayResponse {
 }
 
 export interface Receipt {
-  restaurant: { name: string; address: string; phone: string; nif: string; rccm: string; footer: string; currency: string };
+  restaurant: { name: string; address: string; phone: string; nif: string; rccm: string; footer: string; footerEn: string; currency: string };
   ticketNumber: number;
   createdAt: string;
   cashier: string;
   servers: string[];
   table: number | null;
   orderType: OrderType;
+  /** Langue du client : langue par défaut du ticket */
+  language: OrderLanguage;
   orderNumbers: number[];
-  lines: { id: string; name: string; quantity: number; unitPrice: number; total: number; modifiers: OrderItemModifiers | null }[];
-  paidLines: { name: string; quantity: number; amount: number }[];
+  lines: { id: string; nameFr: string; nameEn: string; quantity: number; unitPrice: number; total: number; modifiers: OrderItemModifiers | null }[];
+  paidLines: { nameFr: string; nameEn: string; quantity: number; amount: number }[];
   payment: {
     mode: PaymentMode;
     label: string | null;
@@ -200,7 +232,7 @@ export interface Receipt {
     reference: string | null;
   };
   history: { number: number; mode: PaymentMode; amount: number; label: string | null; createdAt: string }[];
-  discounts: { reason: string; amount: number; label: string | null }[];
+  discounts: { reason: string; amount: number; percent: number | null }[];
   totals: { total: number; discounted: number; paidBefore: number; paidNow: number; remainingAfter: number };
 }
 
@@ -219,7 +251,7 @@ export interface DailyStats {
     changePct: number | null;
     payments: number;
   };
-  orders: { created: number; served: number; cancelled: number };
+  orders: { created: number; served: number; cancelled: number; english: number };
   bills: { settled: number; dineIn: number; takeaway: number; averageAmount: number };
   outstanding: number;
   discounts: { amount: number; count: number };
@@ -229,7 +261,8 @@ export interface DailyStats {
 
 export interface TopItem {
   menuItemId: string;
-  name: string;
+  nameFr: string;
+  nameEn: string;
   station: Station;
   quantity: number;
   revenue: number;

@@ -3,6 +3,9 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Loader2, ShoppingCart, X } from "lucide-react";
 import { AppHeader } from "../components/AppHeader";
 import { toast } from "../components/Toasts";
+import { useTranslation } from "react-i18next";
+import i18n, { currentLang } from "../i18n";
+import { itemName, toOrderLanguage } from "../lib/localize";
 import { TableSelector } from "../components/server/TableSelector";
 import { MenuBrowser } from "../components/server/MenuBrowser";
 import { CustomizeModal } from "../components/server/CustomizeModal";
@@ -15,6 +18,7 @@ import { useAuth } from "../store/auth";
 import type { Category, MenuItem, Order } from "../types";
 
 export function ServerView() {
+  const { t } = useTranslation();
   const user = useAuth((s) => s.user);
   const { table, orderType, lines, selectTable, selectTakeaway, resetTarget, add, clear } = useCart();
   const hasTarget = table !== null || orderType !== "DINE_IN";
@@ -31,14 +35,16 @@ export function ServerView() {
     void load();
     const socket = getSocket();
     // Rupture de stock / modification de la carte par le gérant : mise à jour instantanée
-    const onMenu = (event: { action: string; item?: { id: string; name: string; isAvailable: boolean } }) => {
+    const onMenu = (event: { action: string; item?: { id: string; nameFr: string; nameEn: string; isAvailable: boolean } }) => {
       void load();
       if (event.action !== "availability" || !event.item) return;
-      const { id, name, isAvailable } = event.item;
-      if (isAvailable) return toast.info(`${name} est de nouveau disponible`);
+      const { id, isAvailable } = event.item;
+      // i18n.t (et non le t du rendu) : langue courante au moment de l'événement
+      const name = itemName(event.item, currentLang());
+      if (isAvailable) return toast.info(i18n.t("order.backInStock", { name }));
       const inCart = useCart.getState().lines.some((l) => l.item.id === id);
-      if (inCart) toast.error(`${name} est épuisé : retirez-le du panier`);
-      else toast.info(`${name} est épuisé`);
+      if (inCart) toast.error(i18n.t("order.soldOutInCart", { name }));
+      else toast.info(i18n.t("order.nowSoldOut", { name }));
     };
     socket.on("connect", load);
     socket.on("menu_updated", onMenu);
@@ -62,7 +68,8 @@ export function ServerView() {
     const socket = getSocket();
     const onUpdate = (order: Order) => {
       if (order.status === "READY" && order.server.id === user?.id) {
-        toast.info(`${order.table ? `Table ${order.table.number}` : "À emporter"} — bon #${order.number} prêt à servir`);
+        const where = order.table ? i18n.t("common.table", { number: order.table.number }) : i18n.t("common.takeaway");
+        toast.info(i18n.t("order.readyToServe", { where, number: order.number }));
       }
       if (table && order.table?.id === table.id) loadTableOrders();
     };
@@ -84,15 +91,17 @@ export function ServerView() {
       const order = await emitWithAck("new_order", {
         type: orderType,
         tableId: table?.id,
+        // Langue de l'écran au moment de la commande : la cuisine pourra la retraduire
+        language: toOrderLanguage(currentLang()),
         items: toOrderLines(lines),
       });
-      toast.success(`Bon #${order.number} envoyé en cuisine`);
+      toast.success(t("order.sent", { number: order.number }));
       clear();
       setCartOpen(false);
       loadTableOrders();
     } catch (e) {
       const message = (e as Error).message;
-      toast.error(message.includes("timed out") ? "Pas de réponse du serveur, vérifiez la connexion" : message);
+      toast.error(message.includes("timed out") ? t("common.noResponse") : message);
     } finally {
       setSending(false);
     }
@@ -108,20 +117,24 @@ export function ServerView() {
   }
 
   function back() {
-    if (lines.length > 0 && !confirm("Abandonner la commande en cours ?")) return;
+    if (lines.length > 0 && !confirm(t("order.confirmAbandon"))) return;
     resetTarget();
     setSentOrders([]);
   }
 
-  const targetLabel = table ? `Table ${table.number}` : orderType === "TAKEAWAY" ? "À emporter" : "Choisir une table";
+  const targetLabel = table
+    ? t("common.table", { number: table.number })
+    : orderType === "TAKEAWAY"
+      ? t("common.takeaway")
+      : t("order.chooseTable");
   const count = lines.reduce((s, l) => s + l.quantity, 0);
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader title={hasTarget ? targetLabel : "Prise de commande"}>
+      <AppHeader title={hasTarget ? targetLabel : t("order.title")}>
         {hasTarget && (
-          <button onClick={back} className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium hover:bg-slate-100">
-            <ArrowLeft size={16} /> Tables
+          <button onClick={back} aria-label={t("order.tables")} className="flex min-h-11 items-center gap-1 rounded-lg px-3 text-sm font-medium hover:bg-slate-100">
+            <ArrowLeft size={16} /> <span className="hidden sm:inline">{t("order.tables")}</span>
           </button>
         )}
       </AppHeader>
@@ -138,7 +151,7 @@ export function ServerView() {
             categories={categories}
             onCustomize={setCustomizing}
             onQuickAdd={(item) => {
-              add({ item, quantity: 1, extras: [] });
+              add({ item, quantity: 1, extras: [], quickNotes: [] });
             }}
           />
 
@@ -154,7 +167,7 @@ export function ServerView() {
               className="flex w-full items-center justify-between rounded-2xl bg-slate-900 px-5 py-4 text-white shadow-xl"
             >
               <span className="flex items-center gap-2 font-semibold">
-                <ShoppingCart size={20} /> Panier
+                <ShoppingCart size={20} /> {t("order.cart")}
                 {count > 0 && <span className="rounded-full bg-brand-500 px-2 text-sm">{count}</span>}
               </span>
               <span className="font-bold">{formatPrice(cartTotal(lines))}</span>
@@ -179,7 +192,7 @@ export function ServerView() {
                 >
                   <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                     <span className="font-semibold">{targetLabel}</span>
-                    <button onClick={() => setCartOpen(false)} aria-label="Fermer le panier">
+                    <button onClick={() => setCartOpen(false)} aria-label={t("order.closeCart")} className="flex h-11 w-11 items-center justify-center">
                       <X />
                     </button>
                   </div>

@@ -40,7 +40,7 @@ authRouter.post("/login", limiters.perIp, limiters.perProfile, async (req, res) 
   const { userId, pin } = loginSchema.parse(req.body);
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.isActive || !(await bcrypt.compare(pin, user.pinHash))) {
-    throw new HttpError(401, "Code PIN incorrect");
+    throw new HttpError(401, "auth.badPin");
   }
   startSession(res, user); // cookie HttpOnly, aucun jeton exposé au JavaScript
   res.json({ user: { id: user.id, name: user.name, role: user.role } });

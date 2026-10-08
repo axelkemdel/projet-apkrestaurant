@@ -1,13 +1,16 @@
 import { create } from "zustand";
-import type { Extra, MenuItem, NewOrderLine, OrderType, Table } from "../types";
+import type { Extra, Label, MenuItem, NewOrderLine, OrderType, QuickNote, Table } from "../types";
 
 export interface CartLine {
   key: string;
   item: MenuItem;
   quantity: number;
-  cooking?: string;
-  side?: string;
+  /** Options choisies avec leurs libellés FR/EN (le français est envoyé au serveur) */
+  cooking?: Label;
+  side?: Label;
   extras: Extra[];
+  quickNotes: QuickNote[];
+  /** Texte libre (non traduit) */
   notes?: string;
 }
 
@@ -26,9 +29,16 @@ interface CartState {
   clear: () => void;
 }
 
-/** Deux lignes identiques (même plat, mêmes options, même note) sont fusionnées. */
+/** Deux lignes identiques (même plat, mêmes options, mêmes notes) sont fusionnées. */
 function lineKey(l: CartLineInput): string {
-  return [l.item.id, l.cooking ?? "", l.side ?? "", l.extras.map((e) => e.name).sort().join("+"), l.notes ?? ""].join("|");
+  return [
+    l.item.id,
+    l.cooking?.fr ?? "",
+    l.side?.fr ?? "",
+    l.extras.map((e) => e.fr).sort().join("+"),
+    [...l.quickNotes].sort().join("+"),
+    l.notes ?? "",
+  ].join("|");
 }
 
 export function lineUnitPrice(l: Pick<CartLine, "item" | "extras">): number {
@@ -44,9 +54,10 @@ export function toOrderLines(lines: CartLine[]): NewOrderLine[] {
     menuItemId: l.item.id,
     quantity: l.quantity,
     notes: l.notes,
-    cooking: l.cooking,
-    side: l.side,
-    extras: l.extras.map((e) => e.name),
+    quickNotes: l.quickNotes,
+    cooking: l.cooking?.fr,
+    side: l.side?.fr,
+    extras: l.extras.map((e) => e.fr),
   }));
 }
 

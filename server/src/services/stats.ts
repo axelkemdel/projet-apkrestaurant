@@ -27,8 +27,8 @@ export function todayLocal(): string {
 
 const dateSchema = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date attendue au format AAAA-MM-JJ")
-  .refine((d) => !Number.isNaN(Date.parse(d)), "Date invalide");
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "validation.dateFormat")
+  .refine((d) => !Number.isNaN(Date.parse(d)), "validation.dateInvalid");
 
 const num = (v: bigint | number | null | undefined) => Number(v ?? 0);
 
@@ -65,11 +65,12 @@ export async function getDailyStats(query: { date?: unknown }) {
       FROM "Order" o LEFT JOIN "OrderItem" oi ON oi."orderId" = o.id
       WHERE (${local("createdAt", "o")})::date = ${date}::date AND o.status <> 'CANCELLED'
       GROUP BY 1`,
-    prisma.$queryRaw<{ created: bigint; served: bigint; cancelled: bigint }[]>`
+    prisma.$queryRaw<{ created: bigint; served: bigint; cancelled: bigint; english: bigint }[]>`
       SELECT
         COUNT(*) FILTER (WHERE (${local("createdAt")})::date = ${date}::date AND status <> 'CANCELLED')::bigint AS created,
         COUNT(*) FILTER (WHERE "servedAt" IS NOT NULL AND (${local("servedAt")})::date = ${date}::date)::bigint AS served,
-        COUNT(*) FILTER (WHERE (${local("createdAt")})::date = ${date}::date AND status = 'CANCELLED')::bigint AS cancelled
+        COUNT(*) FILTER (WHERE (${local("createdAt")})::date = ${date}::date AND status = 'CANCELLED')::bigint AS cancelled,
+        COUNT(*) FILTER (WHERE (${local("createdAt")})::date = ${date}::date AND status <> 'CANCELLED' AND language = 'EN')::bigint AS english
       FROM "Order"`,
     // Additions soldées ce jour : une addition = les bons d'une même table soldés ensemble
     // (même paidAt), ou un bon à emporter.
@@ -129,6 +130,8 @@ export async function getDailyStats(query: { date?: unknown }) {
       created: num(orderCounts[0]?.created),
       served: num(orderCounts[0]?.served),
       cancelled: num(orderCounts[0]?.cancelled),
+      /** Bons pris en anglais (clientèle anglophone) */
+      english: num(orderCounts[0]?.english),
     },
     bills: {
       settled: billCount,
@@ -161,13 +164,13 @@ export async function getTopItems(query: { date?: unknown; period?: unknown; lim
   const date = query.date === undefined || query.date === "" ? todayLocal() : dateSchema.parse(query.date);
   const period = z.enum(["day", "week", "month"]).default("day").parse(query.period || undefined);
   const limit = z.coerce.number().int().min(1).max(50).default(20).parse(query.limit || undefined);
-  if (!PERIOD_DAYS[period]) throw new HttpError(400, "Période invalide");
+  if (!PERIOD_DAYS[period]) throw new HttpError(400, "stats.invalidPeriod");
   const days = PERIOD_DAYS[period] - 1;
 
   const rows = await prisma.$queryRaw<
-    { menuItemId: string; name: string; station: string; quantity: bigint; revenue: bigint; orders: bigint }[]
+    { menuItemId: string; nameFr: string; nameEn: string; station: string; quantity: bigint; revenue: bigint; orders: bigint }[]
   >`
-    SELECT oi."menuItemId", mi.name, c.station::text AS station,
+    SELECT oi."menuItemId", mi."nameFr", mi."nameEn", c.station::text AS station,
            SUM(oi.quantity)::bigint AS quantity,
            SUM(oi.quantity * oi."unitPrice")::bigint AS revenue,
            COUNT(DISTINCT oi."orderId")::bigint AS orders
@@ -177,11 +180,12 @@ export async function getTopItems(query: { date?: unknown; period?: unknown; lim
     JOIN "Category" c ON c.id = mi."categoryId"
     WHERE o.status <> 'CANCELLED'
       AND (${local("createdAt", "o")})::date BETWEEN ${date}::date - ${days}::int AND ${date}::date
-    GROUP BY oi."menuItemId", mi.name, c.station`;
+    GROUP BY oi."menuItemId", mi."nameFr", mi."nameEn", c.station`;
 
   const items = rows.map((r) => ({
     menuItemId: r.menuItemId,
-    name: r.name,
+    nameFr: r.nameFr,
+    nameEn: r.nameEn,
     station: r.station as "KITCHEN" | "BAR",
     quantity: num(r.quantity),
     revenue: num(r.revenue),

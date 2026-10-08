@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useAuth } from "../store/auth";
+import { currentLang } from "../i18n";
 import type { NewOrderPayload, Order, OrderStatus, Table } from "../types";
 
 interface ServerToClient {
@@ -9,7 +10,7 @@ interface ServerToClient {
   table_updated: (table: Pick<Table, "id" | "number" | "status">) => void;
   menu_updated: (event: {
     action: "created" | "updated" | "deleted" | "availability" | "categories";
-    item?: { id: string; name: string; isAvailable: boolean; isArchived: boolean };
+    item?: { id: string; nameFr: string; nameEn: string; isAvailable: boolean; isArchived: boolean };
   }) => void;
   bill_updated: (event: { tableId: string | null; orderIds: string[]; remaining: number; closed: boolean }) => void;
   payment_recorded: (event: { paymentId: string; tableId: string | null; orderIds: string[]; amount: number; remaining: number; closed: boolean }) => void;
@@ -18,6 +19,7 @@ interface ServerToClient {
 type AckResponse<T> = { ok: true; data: T } | { ok: false; error: string };
 
 interface ClientToServer {
+  set_lang: (lang: string) => void;
   new_order: (payload: NewOrderPayload, ack: (res: AckResponse<Order>) => void) => void;
   order_status: (payload: { orderId: string; status: OrderStatus }, ack: (res: AckResponse<Order>) => void) => void;
 }
@@ -34,7 +36,13 @@ let socket: AppSocket | null = null;
  */
 export function getSocket(): AppSocket {
   if (socket) return socket;
-  socket = io({ autoConnect: false, withCredentials: true, transports: ["websocket", "polling"] });
+  // `auth` évalué à chaque connexion : la langue courante est transmise au serveur
+  socket = io({
+    autoConnect: false,
+    withCredentials: true,
+    transports: ["websocket", "polling"],
+    auth: (cb) => cb({ lang: currentLang() }),
+  });
   socket.on("connect_error", (err) => {
     if (err.message === "Session expirée") useAuth.getState().expire();
   });
@@ -58,7 +66,7 @@ export function disconnectSocket() {
 }
 
 /** Émet un événement et attend l'accusé de réception du serveur. */
-export async function emitWithAck<E extends keyof ClientToServer>(
+export async function emitWithAck<E extends "new_order" | "order_status">(
   event: E,
   payload: Parameters<ClientToServer[E]>[0],
 ): Promise<Order> {

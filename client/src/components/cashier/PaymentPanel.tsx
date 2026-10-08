@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Banknote, Check, CreditCard, Delete, Loader2, Minus, Plus, Smartphone, Users } from "lucide-react";
-import { formatPrice, paymentModeLabel } from "../../lib/format";
+import { formatPrice } from "../../lib/format";
+import { useTranslation } from "react-i18next";
 import type { Bill, PaymentMode, PayRequest } from "../../types";
 import type { ItemSelection } from "./BillItems";
 
 export type SplitMode = "FULL" | "EQUAL" | "ITEMS" | "CUSTOM";
 
-const SPLITS: { value: SplitMode; label: string }[] = [
-  { value: "FULL", label: "Solde" },
-  { value: "EQUAL", label: "Parts égales" },
-  { value: "ITEMS", label: "Par articles" },
-  { value: "CUSTOM", label: "Montant libre" },
+const SPLITS: { value: SplitMode; label: "pay.full" | "pay.equal" | "pay.items" | "pay.custom" }[] = [
+  { value: "FULL", label: "pay.full" },
+  { value: "EQUAL", label: "pay.equal" },
+  { value: "ITEMS", label: "pay.items" },
+  { value: "CUSTOM", label: "pay.custom" },
 ];
 
 const MODES: { value: PaymentMode; Icon: typeof Banknote; accent: string }[] = [
@@ -47,6 +48,7 @@ export function PaymentPanel({
   submitting: boolean;
   onSubmit: (req: Omit<PayRequest, "tableId" | "orderId">) => void;
 }) {
+  const { t } = useTranslation();
   const remaining = bill.totals.remaining;
   const [mode, setMode] = useState<PaymentMode>("CASH");
   const [received, setReceived] = useState("");
@@ -108,9 +110,9 @@ export function PaymentPanel({
   }
 
   let error: string | null = null;
-  if (amount <= 0) error = split === "ITEMS" ? "Sélectionnez des articles" : "Saisissez un montant";
-  else if (amount > remaining) error = `Dépasse le solde (${formatPrice(remaining)})`;
-  else if (mode === "CASH" && receivedValue < amount) error = "Montant reçu insuffisant";
+  if (amount <= 0) error = split === "ITEMS" ? t("pay.selectItems") : t("pay.enterAmount");
+  else if (amount > remaining) error = t("pay.exceedsBalance", { remaining: formatPrice(remaining) });
+  else if (mode === "CASH" && receivedValue < amount) error = t("pay.cashInsufficient");
 
   function submit() {
     if (error) return;
@@ -144,7 +146,7 @@ export function PaymentPanel({
                 split === s.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"
               }`}
             >
-              {s.label}
+              {t(s.label)}
             </button>
           ))}
         </div>
@@ -160,19 +162,19 @@ export function PaymentPanel({
             >
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-2 text-sm font-medium text-slate-600">
-                  <Users size={16} /> Nombre de personnes
+                  <Users size={16} /> {t("pay.persons")}
                 </span>
                 <div className="flex items-center rounded-xl bg-slate-100">
                   <button
-                    className="p-2.5 disabled:opacity-30"
+                    className="flex h-11 w-11 items-center justify-center disabled:opacity-30"
                     disabled={persons <= Math.max(2, partsPaid + 1)}
                     onClick={() => setPersons((n) => n - 1)}
-                    aria-label="Moins de personnes"
+                    aria-label={t("pay.fewerPersons")}
                   >
                     <Minus size={16} />
                   </button>
                   <span className="w-8 text-center text-lg font-bold">{persons}</span>
-                  <button className="p-2.5" onClick={() => setPersons((n) => Math.min(30, n + 1))} aria-label="Plus de personnes">
+                  <button className="flex h-11 w-11 items-center justify-center" onClick={() => setPersons((n) => Math.min(30, n + 1))} aria-label={t("pay.morePersons")}>
                     <Plus size={16} />
                   </button>
                 </div>
@@ -198,8 +200,7 @@ export function PaymentPanel({
                 })}
               </div>
               <p className="text-sm text-slate-500">
-                {formatPrice(remaining)} ÷ {partsLeft} = <strong className="text-slate-900">{formatPrice(share)}</strong> par
-                personne
+                {formatPrice(remaining)} ÷ {partsLeft} = <strong className="text-slate-900">{formatPrice(share)}</strong> {t("pay.perPerson")}
               </p>
             </motion.div>
           )}
@@ -211,7 +212,7 @@ export function PaymentPanel({
               exit={{ opacity: 0 }}
               className="rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-600"
             >
-              {itemsCount === 0 ? "Touchez les articles dans l'addition" : `${itemsCount} article${itemsCount > 1 ? "s" : ""} sélectionné${itemsCount > 1 ? "s" : ""}`}
+              {itemsCount === 0 ? t("pay.tapItems") : t("pay.itemsSelected", { count: itemsCount })}
             </motion.p>
           )}
         </AnimatePresence>
@@ -224,7 +225,7 @@ export function PaymentPanel({
           }`}
         >
           <div className={`text-xs font-semibold uppercase tracking-wide ${keypadTarget === "amount" ? "text-brand-700" : "text-slate-400"}`}>
-            À encaisser
+            {t("pay.toCollect")}
           </div>
           <div className="text-3xl font-black tabular-nums">{formatPrice(amount)}</div>
         </button>
@@ -239,7 +240,7 @@ export function PaymentPanel({
                 mode === value ? accent : "border-slate-200 text-slate-600 hover:border-slate-300"
               }`}
             >
-              <Icon size={18} /> {paymentModeLabel[value]}
+              <Icon size={18} /> {t(`paymentModes.${value}`)}
             </button>
           ))}
         </div>
@@ -253,13 +254,13 @@ export function PaymentPanel({
                   keypadTarget === "received" ? "border-brand-500 bg-brand-50" : "border-slate-200"
                 }`}
               >
-                <div className="text-xs font-semibold uppercase text-slate-500">Reçu</div>
+                <div className="text-xs font-semibold uppercase text-slate-500">{t("pay.received")}</div>
                 <div className="text-xl font-bold tabular-nums">{formatPrice(receivedValue)}</div>
               </button>
               <div
                 className={`rounded-xl px-3 py-2 ${change > 0 ? "bg-emerald-600 text-white" : change < 0 ? "bg-red-50 text-red-700" : "bg-slate-100"}`}
               >
-                <div className="text-xs font-semibold uppercase opacity-80">Rendu monnaie</div>
+                <div className="text-xs font-semibold uppercase opacity-80">{t("pay.change")}</div>
                 <div className="text-xl font-bold tabular-nums">{formatPrice(Math.max(0, change))}</div>
               </div>
             </div>
@@ -274,7 +275,7 @@ export function PaymentPanel({
                     }}
                     className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium hover:bg-slate-200"
                   >
-                    {v === amount ? "Compte exact" : formatPrice(v)}
+                    {v === amount ? t("pay.exact") : formatPrice(v)}
                   </button>
                 ))}
               </div>
@@ -283,13 +284,13 @@ export function PaymentPanel({
         ) : (
           <label className="block">
             <span className="mb-1 block text-xs font-semibold uppercase text-slate-500">
-              {mode === "CARD" ? "N° d'autorisation (facultatif)" : "Référence de transaction"}
+              {mode === "CARD" ? t("pay.authCode") : t("pay.transactionRef")}
             </span>
             <input
               value={reference}
               onChange={(e) => setReference(e.target.value)}
               maxLength={60}
-              placeholder={mode === "CARD" ? "Ex : 123456" : "Ex : PP2610.1234.A56789"}
+              placeholder={mode === "CARD" ? t("pay.authCodeExample") : t("pay.transactionRefExample")}
               className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-mono outline-none focus:border-brand-500"
             />
           </label>
@@ -305,7 +306,7 @@ export function PaymentPanel({
                 className={`flex h-12 items-center justify-center rounded-xl text-lg font-semibold active:scale-95 ${
                   k === "C" ? "bg-red-50 text-red-600" : k === "⌫" ? "bg-slate-200" : "bg-slate-100 hover:bg-slate-200"
                 } ${k === "0" ? "col-span-2" : ""}`}
-                aria-label={k === "⌫" ? "Effacer un chiffre" : k === "C" ? "Effacer" : k}
+                aria-label={k === "⌫" ? t("pay.eraseDigit") : k === "C" ? t("pin.erase") : k}
               >
                 {k === "⌫" ? <Delete size={20} /> : k}
               </button>
@@ -323,7 +324,7 @@ export function PaymentPanel({
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white hover:bg-emerald-500 disabled:bg-slate-300"
         >
           {submitting ? <Loader2 className="animate-spin" /> : <Check />}
-          Encaisser {amount > 0 && formatPrice(amount)}
+          {t("pay.collect")} {amount > 0 && formatPrice(amount)}
         </motion.button>
       </div>
     </div>

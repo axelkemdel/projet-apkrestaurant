@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Minus, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Modal } from "../Modal";
 import { formatPrice } from "../../lib/format";
+import { itemName, pick, useLang } from "../../lib/localize";
 import type { CartLineInput } from "../../store/cart";
-import type { Extra, MenuItem } from "../../types";
-
-const QUICK_NOTES = ["Sans oignon", "Sans piment", "Bien pimenté", "Sauce à part", "Sans sel", "Allergie arachide"];
+import { QUICK_NOTES, type Extra, type Label, type MenuItem, type QuickNote } from "../../types";
 
 export function CustomizeModal({
   item,
@@ -16,10 +16,13 @@ export function CustomizeModal({
   onClose: () => void;
   onConfirm: (line: CartLineInput) => void;
 }) {
+  const { t } = useTranslation();
+  const lang = useLang();
   const [quantity, setQuantity] = useState(1);
-  const [cooking, setCooking] = useState<string | undefined>();
-  const [side, setSide] = useState<string | undefined>();
+  const [cooking, setCooking] = useState<Label | undefined>();
+  const [side, setSide] = useState<Label | undefined>();
   const [extras, setExtras] = useState<Extra[]>([]);
+  const [quickNotes, setQuickNotes] = useState<QuickNote[]>([]);
   const [notes, setNotes] = useState("");
 
   // Réinitialise le formulaire à chaque ouverture, avec les premières options présélectionnées
@@ -27,21 +30,18 @@ export function CustomizeModal({
     if (!item) return;
     setQuantity(1);
     const cookings = item.options?.cooking;
-    setCooking(cookings?.find((c) => c === "À point") ?? cookings?.[0]);
+    setCooking(cookings?.find((c) => c.fr === "À point") ?? cookings?.[0]);
     setSide(item.options?.sides?.[0]);
     setExtras([]);
+    setQuickNotes([]);
     setNotes("");
   }, [item]);
 
   const options = item?.options ?? {};
   const unit = (item?.price ?? 0) + extras.reduce((s, e) => s + e.price, 0);
 
-  function toggleNote(n: string) {
-    setNotes((cur) => {
-      const parts = cur.split(",").map((p) => p.trim()).filter(Boolean);
-      return (parts.includes(n) ? parts.filter((p) => p !== n) : [...parts, n]).join(", ");
-    });
-  }
+  const toggleQuickNote = (code: QuickNote) =>
+    setQuickNotes((cur) => (cur.includes(code) ? cur.filter((c) => c !== code) : [...cur, code]));
 
   return (
     <Modal
@@ -49,47 +49,45 @@ export function CustomizeModal({
       onClose={onClose}
       title={
         <div>
-          {item?.name}
+          {item && itemName(item, lang)}
           <div className="text-sm font-normal text-slate-500">{item && formatPrice(item.price)}</div>
         </div>
       }
       footer={
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-xl bg-slate-100">
-            <button className="p-3" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label="Moins">
+            <button className="flex h-12 w-12 items-center justify-center" onClick={() => setQuantity((q) => Math.max(1, q - 1))} aria-label={t("order.less")}>
               <Minus size={18} />
             </button>
             <span className="w-8 text-center text-lg font-bold">{quantity}</span>
-            <button className="p-3" onClick={() => setQuantity((q) => q + 1)} aria-label="Plus">
+            <button className="flex h-12 w-12 items-center justify-center" onClick={() => setQuantity((q) => q + 1)} aria-label={t("order.more")}>
               <Plus size={18} />
             </button>
           </div>
           <button
-            onClick={() => item && onConfirm({ item, quantity, cooking, side, extras, notes: notes.trim() || undefined })}
-            className="flex-1 rounded-xl bg-brand-500 py-3.5 font-semibold text-white hover:bg-brand-600"
+            onClick={() => item && onConfirm({ item, quantity, cooking, side, extras, quickNotes, notes: notes.trim() || undefined })}
+            className="min-h-12 flex-1 rounded-xl bg-brand-500 font-semibold text-white hover:bg-brand-600"
           >
-            Ajouter · {formatPrice(unit * quantity)}
+            {t("order.addFor", { price: formatPrice(unit * quantity) })}
           </button>
         </div>
       }
     >
       <div className="space-y-5">
         {options.cooking?.length ? (
-          <ChoiceGroup label="Cuisson" values={options.cooking} value={cooking} onChange={setCooking} />
+          <ChoiceGroup label={t("order.cooking")} values={options.cooking} value={cooking} onChange={setCooking} />
         ) : null}
-        {options.sides?.length ? (
-          <ChoiceGroup label="Accompagnement" values={options.sides} value={side} onChange={setSide} />
-        ) : null}
+        {options.sides?.length ? <ChoiceGroup label={t("order.side")} values={options.sides} value={side} onChange={setSide} /> : null}
         {options.extras?.length ? (
           <fieldset>
-            <legend className="mb-2 text-sm font-semibold text-slate-700">Suppléments</legend>
+            <legend className="mb-2 text-sm font-semibold text-slate-700">{t("order.extras")}</legend>
             <div className="space-y-2">
               {options.extras.map((e) => {
-                const checked = extras.some((x) => x.name === e.name);
+                const checked = extras.some((x) => x.fr === e.fr);
                 return (
                   <label
-                    key={e.name}
-                    className={`flex cursor-pointer items-center justify-between rounded-xl border px-4 py-3 ${
+                    key={e.fr}
+                    className={`flex min-h-12 cursor-pointer items-center justify-between rounded-xl border px-4 py-2 ${
                       checked ? "border-brand-500 bg-brand-50" : "border-slate-200"
                     }`}
                   >
@@ -98,11 +96,11 @@ export function CustomizeModal({
                         type="checkbox"
                         className="h-5 w-5 accent-brand-500"
                         checked={checked}
-                        onChange={() => setExtras((xs) => (checked ? xs.filter((x) => x.name !== e.name) : [...xs, e]))}
+                        onChange={() => setExtras((xs) => (checked ? xs.filter((x) => x.fr !== e.fr) : [...xs, e]))}
                       />
-                      {e.name}
+                      {pick(e, lang)}
                     </span>
-                    <span className="text-sm text-slate-500">{e.price ? `+ ${formatPrice(e.price)}` : "Offert"}</span>
+                    <span className="text-sm text-slate-500">{e.price ? `+ ${formatPrice(e.price)}` : t("order.free")}</span>
                   </label>
                 );
               })}
@@ -111,30 +109,34 @@ export function CustomizeModal({
         ) : null}
 
         <div>
-          <label htmlFor="notes" className="mb-2 block text-sm font-semibold text-slate-700">
-            Note pour la cuisine
-          </label>
+          <span className="mb-2 block text-sm font-semibold text-slate-700">{t("order.kitchenNotes")}</span>
+          {/* Notes rapides codifiées : la cuisine les lit traduites dans sa langue */}
           <div className="mb-2 flex flex-wrap gap-2">
-            {QUICK_NOTES.map((n) => {
-              const active = notes.split(",").map((p) => p.trim()).includes(n);
+            {QUICK_NOTES.map((code) => {
+              const active = quickNotes.includes(code);
               return (
                 <button
-                  key={n}
-                  onClick={() => toggleNote(n)}
-                  className={`rounded-full px-3 py-1.5 text-sm ${active ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}
+                  key={code}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => toggleQuickNote(code)}
+                  className={`min-h-10 rounded-full px-3 text-sm ${active ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}
                 >
-                  {n}
+                  {t(`quickNotes.${code}`)}
                 </button>
               );
             })}
           </div>
+          <label htmlFor="notes" className="mb-1 block text-xs text-slate-500">
+            {t("order.freeNoteHint")}
+          </label>
           <textarea
             id="notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             maxLength={200}
             rows={2}
-            placeholder="Ex : sans oignon, bien cuit…"
+            placeholder={t("order.notesPlaceholder")}
             className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-brand-500"
           />
         </div>
@@ -143,30 +145,23 @@ export function CustomizeModal({
   );
 }
 
-function ChoiceGroup({
-  label,
-  values,
-  value,
-  onChange,
-}: {
-  label: string;
-  values: string[];
-  value?: string;
-  onChange: (v: string) => void;
-}) {
+function ChoiceGroup({ label, values, value, onChange }: { label: string; values: Label[]; value?: Label; onChange: (v: Label) => void }) {
+  const lang = useLang();
   return (
     <fieldset>
       <legend className="mb-2 text-sm font-semibold text-slate-700">{label}</legend>
       <div className="flex flex-wrap gap-2">
         {values.map((v) => (
           <button
-            key={v}
+            key={v.fr}
+            type="button"
+            aria-pressed={value?.fr === v.fr}
             onClick={() => onChange(v)}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-medium ${
-              value === v ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200 hover:border-slate-400"
+            className={`min-h-12 rounded-xl border px-4 text-sm font-medium ${
+              value?.fr === v.fr ? "border-brand-500 bg-brand-500 text-white" : "border-slate-200 hover:border-slate-400"
             }`}
           >
-            {v}
+            {pick(v, lang)}
           </button>
         ))}
       </div>

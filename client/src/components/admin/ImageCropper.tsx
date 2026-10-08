@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, Move, ZoomIn } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import i18n from "../../i18n";
 
 const ASPECT = 4 / 3;
 const OUTPUT_W = 800;
@@ -11,6 +13,7 @@ const OUTPUT_H = 600;
  * plus léger pour les tablettes, et métadonnées EXIF (GPS, appareil) supprimées.
  */
 export function ImageCropper({ file, onCancel, onDone }: { file: File; onCancel: () => void; onDone: (cropped: File) => void }) {
+  const { t } = useTranslation();
   const frameRef = useRef<HTMLDivElement>(null);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const [src, setSrc] = useState<string | null>(null);
@@ -28,7 +31,7 @@ export function ImageCropper({ file, onCancel, onDone }: { file: File; onCancel:
     const image = new Image();
     // Garde : une image d'un rendu précédent (URL déjà libérée) ne doit pas écraser l'état
     image.onload = () => !cancelled && setImg(image);
-    image.onerror = () => !cancelled && setError("Image illisible");
+    image.onerror = () => !cancelled && setError(i18n.t("crop.unreadable"));
     image.src = url;
     return () => {
       cancelled = true;
@@ -88,7 +91,7 @@ export function ImageCropper({ file, onCancel, onDone }: { file: File; onCancel:
     let blob = await toBlob("image/webp");
     if (!blob || blob.type !== "image/webp") blob = await toBlob("image/jpeg");
     setBusy(false);
-    if (!blob) return setError("Recadrage impossible sur ce navigateur");
+    if (!blob) return setError(t("crop.unsupported"));
     onDone(new File([blob], blob.type === "image/webp" ? "plat.webp" : "plat.jpg", { type: blob.type }));
   }
 
@@ -106,7 +109,7 @@ export function ImageCropper({ file, onCancel, onDone }: { file: File; onCancel:
         {src && img && (
           <img
             src={src}
-            alt="Photo à recadrer"
+            alt={t("crop.alt")}
             draggable={false}
             className="pointer-events-none absolute max-w-none cursor-grab"
             style={{ width: imgW, height: imgH, left: pos.x, top: pos.y }}
@@ -120,7 +123,7 @@ export function ImageCropper({ file, onCancel, onDone }: { file: File; onCancel:
           ))}
         </div>
         <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-full bg-black/50 px-2 py-1 text-xs text-white">
-          <Move size={12} /> Glissez pour cadrer
+          <Move size={12} /> {t("crop.drag")}
         </span>
       </div>
       <label className="flex min-h-12 items-center gap-3">
@@ -133,13 +136,13 @@ export function ImageCropper({ file, onCancel, onDone }: { file: File; onCancel:
           value={zoom}
           onChange={(e) => setZoom(Number(e.target.value))}
           className="h-12 flex-1 accent-brand-500"
-          aria-label="Zoom"
+          aria-label={t("crop.zoom")}
         />
       </label>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="grid grid-cols-2 gap-2">
         <button type="button" onClick={onCancel} className="min-h-12 rounded-xl bg-slate-100 font-semibold hover:bg-slate-200">
-          Annuler
+          {t("common.cancel")}
         </button>
         <button
           type="button"
@@ -147,7 +150,7 @@ export function ImageCropper({ file, onCancel, onDone }: { file: File; onCancel:
           disabled={!img || busy}
           className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-slate-900 font-semibold text-white disabled:opacity-50"
         >
-          {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Valider le cadrage
+          {busy ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {t("crop.validate")}
         </button>
       </div>
     </div>

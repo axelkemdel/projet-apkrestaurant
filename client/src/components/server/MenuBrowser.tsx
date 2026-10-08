@@ -2,6 +2,8 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import { formatPrice } from "../../lib/format";
+import { useTranslation } from "react-i18next";
+import { categoryName, itemDescription, itemName, useLang } from "../../lib/localize";
 import type { Category, MenuItem } from "../../types";
 
 function hasOptions(item: MenuItem) {
@@ -18,6 +20,8 @@ export function MenuBrowser({
   onQuickAdd: (item: MenuItem) => void;
   onCustomize: (item: MenuItem) => void;
 }) {
+  const { t } = useTranslation();
+  const lang = useLang();
   const [activeCat, setActiveCat] = useState<string>(categories[0]?.id ?? "");
   const [query, setQuery] = useState("");
 
@@ -25,7 +29,8 @@ export function MenuBrowser({
     const q = query.trim().toLowerCase();
     if (q) {
       // La recherche porte sur toute la carte, quelle que soit la catégorie active
-      return categories.flatMap((c) => c.items).filter((i) => i.name.toLowerCase().includes(q));
+      // Recherche dans les deux langues (un serveur peut taper « chicken » ou « poulet »)
+      return categories.flatMap((c) => c.items).filter((i) => `${i.nameFr} ${i.nameEn}`.toLowerCase().includes(q));
     }
     return categories.find((c) => c.id === activeCat)?.items ?? [];
   }, [categories, activeCat, query]);
@@ -38,11 +43,11 @@ export function MenuBrowser({
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Rechercher un plat, une boisson…"
+            placeholder={t("order.searchPlaceholder")}
             className="flex-1 bg-transparent outline-none placeholder:text-slate-400"
           />
           {query && (
-            <button onClick={() => setQuery("")} aria-label="Effacer la recherche">
+            <button onClick={() => setQuery("")} aria-label={t("order.clearSearch")}>
               <X size={16} className="text-slate-400" />
             </button>
           )}
@@ -57,7 +62,7 @@ export function MenuBrowser({
                   activeCat === c.id ? "bg-brand-500 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 }`}
               >
-                {c.name}
+                {categoryName(c, lang)}
               </button>
             ))}
           </div>
@@ -89,17 +94,17 @@ export function MenuBrowser({
                     onError={(e) => (e.currentTarget.style.display = "none")}
                   />
                 )}
-                <span className="pr-8 font-semibold leading-tight">{item.name}</span>
-                {item.description && <span className="mt-1 line-clamp-2 text-xs text-slate-500">{item.description}</span>}
+                <span className="pr-8 font-semibold leading-tight">{itemName(item, lang)}</span>
+                {itemDescription(item, lang) && <span className="mt-1 line-clamp-2 text-xs text-slate-500">{itemDescription(item, lang)}</span>}
                 <span className="mt-auto pt-2 font-bold text-brand-600">
-                  {unavailable ? <span className="rounded-md bg-slate-800 px-2 py-0.5 text-xs uppercase text-white">Épuisé</span> : formatPrice(item.price)}
+                  {unavailable ? <span className="rounded-md bg-slate-800 px-2 py-0.5 text-xs uppercase text-white">{t("order.soldOut")}</span> : formatPrice(item.price)}
                 </span>
               </button>
               {!unavailable && (
                 <button
                   onClick={() => onCustomize(item)}
                   className="absolute right-2 top-2 rounded-lg bg-white/90 p-1.5 text-slate-500 shadow-sm hover:bg-slate-100 hover:text-slate-700"
-                  aria-label={`Personnaliser ${item.name}`}
+                  aria-label={t("order.customize", { name: itemName(item, lang) })}
                 >
                   {hasOptions(item) ? <SlidersHorizontal size={16} /> : <Plus size={16} />}
                 </button>
@@ -107,7 +112,7 @@ export function MenuBrowser({
             </motion.div>
           );
         })}
-        {items.length === 0 && <p className="col-span-full py-10 text-center text-slate-400">Aucun article trouvé</p>}
+        {items.length === 0 && <p className="col-span-full py-10 text-center text-slate-400">{t("order.noResults")}</p>}
       </div>
     </div>
   );

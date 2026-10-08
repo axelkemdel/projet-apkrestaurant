@@ -4,7 +4,10 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { ArrowDownRight, ArrowUpRight, Banknote, CalendarDays, Hourglass, Loader2, ReceiptText as Receipt, UtensilsCrossed } from "lucide-react";
 import { api } from "../../lib/api";
 import { getSocket } from "../../lib/socket";
-import { formatPrice, paymentModeLabel } from "../../lib/format";
+import { formatNumber, formatPrice } from "../../lib/format";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
+import { itemName, useLang } from "../../lib/localize";
 import { toast } from "../Toasts";
 import type { DailyStats, PaymentMode, Station, TopItems } from "../../types";
 
@@ -20,8 +23,7 @@ const SERIES = "#2a78d6";
 const GRID = "#e2e8f0";
 const AXIS = "#64748b";
 
-const compact = new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 });
-const integer = new Intl.NumberFormat("fr-FR");
+const compact = (lang: string) => new Intl.NumberFormat(lang === "en" ? "en-GB" : "fr-FR", { notation: "compact", maximumFractionDigits: 1 });
 
 function isoDate(offsetDays = 0) {
   const d = new Date();
@@ -30,6 +32,8 @@ function isoDate(offsetDays = 0) {
 }
 
 export function StatsTab() {
+  const { t } = useTranslation();
+  const lang = useLang();
   const [date, setDate] = useState(isoDate());
   const [daily, setDaily] = useState<DailyStats | null>(null);
   const [top, setTop] = useState<TopItems | null>(null);
@@ -38,12 +42,12 @@ export function StatsTab() {
 
   const load = useCallback(async () => {
     try {
-      const [d, t] = await Promise.all([
+      const [d, ti] = await Promise.all([
         api<DailyStats>(`/admin/stats/daily?date=${date}`),
         api<TopItems>(`/admin/stats/top-items?date=${date}&period=${period}`),
       ]);
       setDaily(d);
-      setTop(t);
+      setTop(ti);
       setUpdatedAt(new Date());
     } catch (e) {
       toast.error((e as Error).message);
@@ -88,8 +92,8 @@ export function StatsTab() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex rounded-xl bg-white p-1 shadow-sm">
           {[
-            [isoDate(), "Aujourd'hui"],
-            [isoDate(-1), "Hier"],
+            [isoDate(), t("stats.today")],
+            [isoDate(-1), t("stats.yesterday")],
           ].map(([value, label]) => (
             <button
               key={value}
@@ -108,14 +112,14 @@ export function StatsTab() {
             max={isoDate()}
             onChange={(e) => e.target.value && setDate(e.target.value)}
             className="bg-transparent outline-none"
-            aria-label="Choisir une date"
+            aria-label={t("stats.pickDate")}
           />
         </label>
         <div className="flex-1" />
         {updatedAt && (
           <span className="flex items-center gap-1.5 text-xs text-slate-500">
             {isToday && <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />}
-            {isToday ? "En direct · " : ""}mis à jour à {updatedAt.toLocaleTimeString("fr-FR")}
+            {t(isToday ? "stats.liveUpdated" : "stats.updated", { time: updatedAt.toLocaleTimeString(lang === "en" ? "en-GB" : "fr-FR") })}
           </span>
         )}
       </div>
@@ -124,53 +128,60 @@ export function StatsTab() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
           icon={Banknote}
-          label={isToday ? "Chiffre d'affaires du jour" : "Chiffre d'affaires"}
+          label={isToday ? t("stats.revenueToday") : t("stats.revenue")}
           value={formatPrice(daily.revenue.today)}
           delta={daily.revenue.changePct}
           deltaHint={
             daily.revenue.comparison === "same_time_yesterday"
-              ? `vs hier à la même heure (${formatPrice(daily.revenue.comparedTo)})`
-              : `vs veille (${formatPrice(daily.revenue.comparedTo)})`
+              ? t("stats.vsSameTime", { amount: formatPrice(daily.revenue.comparedTo) })
+              : t("stats.vsPreviousDay", { amount: formatPrice(daily.revenue.comparedTo) })
           }
-          footer={`${daily.revenue.payments} encaissement${daily.revenue.payments > 1 ? "s" : ""}${
-            daily.discounts.count ? ` · ${formatPrice(daily.discounts.amount)} de remises (${daily.discounts.count})` : ""
-          }`}
+          footer={[
+            t("stats.payments", { count: daily.revenue.payments }),
+            daily.discounts.count ? t("stats.discounts", { count: daily.discounts.count, amount: formatPrice(daily.discounts.amount) }) : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         />
         <Kpi
           icon={UtensilsCrossed}
-          label="Commandes servies"
-          value={integer.format(daily.orders.served)}
-          footer={`${daily.orders.created} bon${daily.orders.created > 1 ? "s" : ""} créé${daily.orders.created > 1 ? "s" : ""}${
-            daily.orders.cancelled ? ` · ${daily.orders.cancelled} annulé${daily.orders.cancelled > 1 ? "s" : ""}` : ""
-          }`}
+          label={t("stats.ordersServed")}
+          value={formatNumber(daily.orders.served)}
+          footer={[
+            t("stats.ticketsCreated", { count: daily.orders.created }),
+            daily.orders.english ? t("stats.inEnglish", { count: daily.orders.english }) : "",
+            daily.orders.cancelled ? t("stats.cancelled", { count: daily.orders.cancelled }) : "",
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         />
         <Kpi
           icon={Receipt}
-          label="Panier moyen par addition"
+          label={t("stats.averageBill")}
           value={formatPrice(daily.bills.averageAmount)}
-          footer={`${daily.bills.settled} addition${daily.bills.settled > 1 ? "s" : ""} soldée${daily.bills.settled > 1 ? "s" : ""} · ${daily.bills.dineIn} sur place, ${daily.bills.takeaway} à emporter`}
+          footer={t("stats.billsSettled", { count: daily.bills.settled, dineIn: daily.bills.dineIn, takeaway: daily.bills.takeaway })}
         />
         <Kpi
           icon={Hourglass}
-          label="Encours non encaissé"
+          label={t("stats.outstanding")}
           value={formatPrice(daily.outstanding)}
-          footer="Additions ouvertes en ce moment"
+          footer={t("stats.openBillsNow")}
         />
       </div>
 
       <div className="grid gap-4 xl:grid-cols-5">
-        <Card title="Encaissements par mode de paiement" className="xl:col-span-2">
+        <Card title={t("stats.byPaymentMode")} className="xl:col-span-2">
           <PaymentModes stats={daily} />
         </Card>
-        <Card title="Plats & boissons stars" className="xl:col-span-3">
+        <Card title={t("stats.topItems")} className="xl:col-span-3">
           <TopItemsList top={top} period={period} onPeriod={setPeriod} />
         </Card>
       </div>
 
-      <Card title="Heures de pointe" subtitle={peakSubtitle(daily)}>
+      <Card title={t("stats.peakHours")} subtitle={peakSubtitle(daily, t)}>
         <div className="grid gap-6 lg:grid-cols-2">
-          <HourlyChart data={daily.hourly} dataKey="revenue" title="Chiffre d'affaires encaissé par heure" format={formatPrice} />
-          <HourlyChart data={daily.hourly} dataKey="orders" title="Bons envoyés en cuisine par heure" format={(v) => `${v} bon${v > 1 ? "s" : ""}`} />
+          <HourlyChart data={daily.hourly} dataKey="revenue" title={t("stats.revenuePerHour")} format={formatPrice} />
+          <HourlyChart data={daily.hourly} dataKey="orders" title={t("stats.ticketsPerHour")} format={(v) => t("stats.tickets", { count: v })} />
         </div>
       </Card>
     </div>
@@ -212,7 +223,7 @@ function Kpi({
             >
               {delta >= 0 ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
               {delta >= 0 ? "+" : ""}
-              {delta.toLocaleString("fr-FR")} %
+              {formatNumber(delta)} %
             </span>
           )}
           {deltaHint && <span className="text-slate-500">{deltaHint}</span>}
@@ -236,13 +247,14 @@ function Card({ title, subtitle, className = "", children }: { title: string; su
 // --- Ventilation des paiements : barre empilée + légende chiffrée ------------
 
 function PaymentModes({ stats }: { stats: DailyStats }) {
+  const { t } = useTranslation();
   const rows = MODE_ORDER.map((mode) => stats.paymentsByMode.find((m) => m.mode === mode) ?? { mode, amount: 0, count: 0 });
   const total = rows.reduce((s, r) => s + r.amount, 0);
-  if (total === 0) return <p className="py-8 text-center text-sm text-slate-400">Aucun encaissement sur cette journée</p>;
+  if (total === 0) return <p className="py-8 text-center text-sm text-slate-400">{t("stats.noPayments")}</p>;
 
   return (
     <div className="space-y-4">
-      <div className="flex h-4 gap-0.5 overflow-hidden rounded-md" role="img" aria-label="Répartition des encaissements par mode">
+      <div className="flex h-4 gap-0.5 overflow-hidden rounded-md" role="img" aria-label={t("stats.byPaymentMode")}>
         {rows
           .filter((r) => r.amount > 0)
           .map((r) => (
@@ -252,17 +264,17 @@ function PaymentModes({ stats }: { stats: DailyStats }) {
               animate={{ flexGrow: r.amount }}
               transition={{ duration: 0.5 }}
               style={{ backgroundColor: MODE_COLOR[r.mode], flexBasis: 0 }}
-              title={`${paymentModeLabel[r.mode]} : ${formatPrice(r.amount)}`}
+              title={`${t(`paymentModes.${r.mode}`)} : ${formatPrice(r.amount)}`}
             />
           ))}
       </div>
       <table className="w-full text-sm">
         <thead className="sr-only">
           <tr>
-            <th>Mode</th>
-            <th>Montant</th>
-            <th>Part</th>
-            <th>Encaissements</th>
+            <th>{t("stats.colMode")}</th>
+            <th>{t("stats.colAmount")}</th>
+            <th>{t("stats.colShare")}</th>
+            <th>{t("stats.colCount")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -271,7 +283,7 @@ function PaymentModes({ stats }: { stats: DailyStats }) {
               <td className="py-2">
                 <span className="flex items-center gap-2 text-slate-700">
                   <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: MODE_COLOR[r.mode] }} />
-                  {paymentModeLabel[r.mode]}
+                  {t(`paymentModes.${r.mode}`)}
                 </span>
               </td>
               <td className="py-2 text-right font-semibold tabular-nums text-slate-900">{formatPrice(r.amount)}</td>
@@ -296,6 +308,8 @@ function TopItemsList({
   period: TopItems["period"];
   onPeriod: (p: TopItems["period"]) => void;
 }) {
+  const { t } = useTranslation();
+  const lang = useLang();
   const [metric, setMetric] = useState<"quantity" | "revenue">("quantity");
   const [station, setStation] = useState<Station | "ALL">("ALL");
 
@@ -313,39 +327,39 @@ function TopItemsList({
           value={metric}
           onChange={setMetric}
           options={[
-            ["quantity", "Volume"],
-            ["revenue", "Valeur"],
+            ["quantity", t("stats.volume")],
+            ["revenue", t("stats.value")],
           ]}
         />
         <Segmented
           value={station}
           onChange={setStation}
           options={[
-            ["ALL", "Tout"],
-            ["KITCHEN", "Plats"],
-            ["BAR", "Boissons"],
+            ["ALL", t("common.all")],
+            ["KITCHEN", t("stats.dishes")],
+            ["BAR", t("stats.drinks")],
           ]}
         />
         <Segmented
           value={period}
           onChange={onPeriod}
           options={[
-            ["day", "Jour"],
-            ["week", "7 jours"],
-            ["month", "30 jours"],
+            ["day", t("stats.day")],
+            ["week", t("stats.week")],
+            ["month", t("stats.month")],
           ]}
         />
       </div>
       {list.length === 0 ? (
-        <p className="py-8 text-center text-sm text-slate-400">Aucune vente sur la période</p>
+        <p className="py-8 text-center text-sm text-slate-400">{t("stats.noSales")}</p>
       ) : (
         <ol className="space-y-2.5">
           {list.map((item, idx) => (
             <li key={item.menuItemId} className="grid grid-cols-[1.5rem_1fr_auto] items-center gap-x-3 gap-y-1">
               <span className="text-sm font-bold text-slate-400">{idx + 1}</span>
-              <span className="truncate text-sm font-medium text-slate-800">{item.name}</span>
+              <span className="truncate text-sm font-medium text-slate-800">{itemName(item, lang)}</span>
               <span className="text-right text-sm font-semibold tabular-nums text-slate-900">
-                {metric === "quantity" ? `${integer.format(item.quantity)} vendu${item.quantity > 1 ? "s" : ""}` : formatPrice(item.revenue)}
+                {metric === "quantity" ? t("stats.sold", { count: item.quantity, formatted: formatNumber(item.quantity) }) : formatPrice(item.revenue)}
               </span>
               <span />
               <div className="col-span-2 h-2 rounded-full bg-slate-100">
@@ -355,7 +369,7 @@ function TopItemsList({
                   initial={{ width: 0 }}
                   animate={{ width: `${(item[metric] / max) * 100}%` }}
                   transition={{ duration: 0.4, delay: idx * 0.04 }}
-                  title={`${item.quantity} vendus · ${formatPrice(item.revenue)} · ${item.orders} bons`}
+                  title={`${t("stats.sold", { count: item.quantity, formatted: formatNumber(item.quantity) })} · ${formatPrice(item.revenue)} · ${t("stats.tickets", { count: item.orders })}`}
                 />
               </div>
             </li>
@@ -384,10 +398,15 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
 
 // --- Heures de pointe : deux histogrammes (jamais de double axe) ---------------
 
-function peakSubtitle(d: DailyStats) {
+function peakSubtitle(d: DailyStats, t: TFunction) {
   const peak = d.hourly.reduce((best, h) => (h.orders > best.orders ? h : best), d.hourly[0]);
-  if (!peak || peak.orders === 0) return "Aucune activité sur cette journée";
-  return `Pic d'affluence : ${peak.hour} h – ${peak.hour + 1} h (${peak.orders} bons, ${peak.items} articles)`;
+  if (!peak || peak.orders === 0) return t("stats.noActivity");
+  return t("stats.peak", {
+    from: peak.hour,
+    to: peak.hour + 1,
+    tickets: t("stats.tickets", { count: peak.orders }),
+    items: t("stats.itemsCount", { count: peak.items }),
+  });
 }
 
 function HourlyChart({
@@ -401,6 +420,7 @@ function HourlyChart({
   title: string;
   format: (v: number) => string;
 }) {
+  const lang = useLang();
   // Plage affichée : heures d'ouverture habituelles, élargie si de l'activité tombe en dehors
   const active = data.filter((h) => h.revenue > 0 || h.orders > 0).map((h) => h.hour);
   const from = Math.min(8, ...active);
@@ -421,7 +441,7 @@ function HourlyChart({
               width={44}
               allowDecimals={false}
               tick={{ fill: AXIS, fontSize: 11 }}
-              tickFormatter={(v: number) => compact.format(v)}
+              tickFormatter={(v: number) => compact(lang).format(v)}
             />
             <Tooltip cursor={{ fill: "#f1f5f9" }} content={({ active, payload }) => <ChartTooltip active={active} payload={payload} format={format} />} />
             <Bar dataKey={dataKey} fill={SERIES} radius={[4, 4, 0, 0]} maxBarSize={28} />
@@ -441,13 +461,12 @@ function ChartTooltip({
   payload?: readonly { value?: unknown; payload?: unknown }[];
   format: (v: number) => string;
 }) {
+  const { t } = useTranslation();
   if (!active || !payload?.length) return null;
   const row = payload[0].payload as DailyStats["hourly"][number];
   return (
     <div className="rounded-lg bg-slate-900 px-3 py-2 text-xs text-white shadow-lg">
-      <div className="font-semibold">
-        {row.hour} h – {row.hour + 1} h
-      </div>
+      <div className="font-semibold">{t("stats.hourRange", { from: row.hour, to: row.hour + 1 })}</div>
       <div>{format(Number(payload[0].value))}</div>
     </div>
   );

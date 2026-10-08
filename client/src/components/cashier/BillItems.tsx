@@ -1,16 +1,17 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChefHat, Minus, Plus, Printer } from "lucide-react";
-import { formatPrice, formatTime, paymentModeLabel } from "../../lib/format";
-import { modifiersText } from "../OrderItemLine";
-import type { Bill, BillDiscount, BillPayment, OrderStatus } from "../../types";
+import { formatPrice, formatTime } from "../../lib/format";
+import { useTranslation } from "react-i18next";
+import { discountReason, formatPercent, itemName, modifiersText, paymentLabel, quickNotesText, useLang } from "../../lib/localize";
+import type { Bill, BillDiscount, BillPayment, Lang, OrderStatus } from "../../types";
 
 export type ItemSelection = Record<string, number>;
 
-const statusLabel: Partial<Record<OrderStatus, { label: string; cls: string }>> = {
-  PENDING: { label: "En attente cuisine", cls: "bg-slate-200 text-slate-700" },
-  PREPARING: { label: "En préparation", cls: "bg-amber-100 text-amber-800" },
-  READY: { label: "Prête", cls: "bg-emerald-100 text-emerald-800" },
-  SERVED: { label: "Servie", cls: "bg-sky-100 text-sky-800" },
+const statusLabel: Partial<Record<OrderStatus, { label: "cashier.waitingKitchen" | "status.PREPARING" | "status.READY" | "status.SERVED"; cls: string }>> = {
+  PENDING: { label: "cashier.waitingKitchen", cls: "bg-slate-200 text-slate-700" },
+  PREPARING: { label: "status.PREPARING", cls: "bg-amber-100 text-amber-800" },
+  READY: { label: "status.READY", cls: "bg-emerald-100 text-emerald-800" },
+  SERVED: { label: "status.SERVED", cls: "bg-sky-100 text-sky-800" },
 };
 
 /**
@@ -22,12 +23,16 @@ export function BillItems({
   selectable,
   selection,
   onSelectionChange,
+  itemsLang,
 }: {
   bill: Bill;
   selectable: boolean;
   selection: ItemSelection;
   onSelectionChange: (s: ItemSelection) => void;
+  /** Langue d'affichage des articles (bascule FR/EN de la caisse) */
+  itemsLang: Lang;
 }) {
+  const { t } = useTranslation();
   const allItems = bill.orders.flatMap((o) => o.items);
 
   function setQty(id: string, qty: number, max: number) {
@@ -51,10 +56,14 @@ export function BillItems({
     <div className="space-y-3">
       {selectable && (
         <div className="flex items-center justify-between rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-700">
-          <span>Touchez les articles réglés par ce client</span>
-          <span className="flex gap-3 font-semibold">
-            <button onClick={selectAll}>Tout</button>
-            <button onClick={() => onSelectionChange({})}>Aucun</button>
+          <span>{t("cashier.tapItemsPaid")}</span>
+          <span className="flex gap-1 font-semibold">
+            <button className="min-h-10 px-2" onClick={selectAll}>
+              {t("common.all")}
+            </button>
+            <button className="min-h-10 px-2" onClick={() => onSelectionChange({})}>
+              {t("common.none")}
+            </button>
           </span>
         </div>
       )}
@@ -65,7 +74,7 @@ export function BillItems({
           <section key={order.id} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
             <header className="flex items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-3 py-2 text-sm">
               <span className="font-semibold">
-                Bon #{order.number}
+                {t("common.ticket", { number: order.number })}
                 <span className="font-normal text-slate-500">
                   {" "}
                   · {order.server.name} · {formatTime(order.createdAt)}
@@ -74,7 +83,7 @@ export function BillItems({
               {st && (
                 <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${st.cls}`}>
                   {(order.status === "PENDING" || order.status === "PREPARING") && <ChefHat size={12} />}
-                  {st.label}
+                  {t(st.label)}
                 </span>
               )}
             </header>
@@ -82,7 +91,7 @@ export function BillItems({
               {order.items.map((item) => {
                 const left = item.quantity - item.paidQuantity;
                 const picked = selection[item.id] ?? 0;
-                const details = modifiersText(item.modifiers);
+                const details = [modifiersText(item.modifiers, itemsLang), quickNotesText(item.quickNotes, t, itemsLang)].filter(Boolean).join(" · ");
                 const fullyPaid = left === 0;
                 return (
                   <li
@@ -100,11 +109,11 @@ export function BillItems({
                       {fullyPaid ? <Check size={15} /> : item.quantity}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className={`font-medium leading-tight ${fullyPaid ? "line-through" : ""}`}>{item.name}</div>
+                      <div className={`font-medium leading-tight ${fullyPaid ? "line-through" : ""}`}>{itemName(item, itemsLang)}</div>
                       {details && <div className="text-xs text-slate-500">{details}</div>}
                       {item.paidQuantity > 0 && !fullyPaid && (
                         <div className="text-xs font-medium text-emerald-700">
-                          {item.paidQuantity} réglé{item.paidQuantity > 1 ? "s" : ""} · reste {left}
+                          {t("cashier.paidLeft", { count: item.paidQuantity, left })}
                         </div>
                       )}
                     </div>
@@ -121,11 +130,11 @@ export function BillItems({
                           className="flex items-center overflow-hidden rounded-lg bg-brand-500 text-white"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <button className="p-1.5" onClick={() => setQty(item.id, picked - 1, left)} aria-label="Retirer">
+                          <button className="flex h-10 w-10 items-center justify-center" onClick={() => setQty(item.id, picked - 1, left)} aria-label={t("order.less")}>
                             <Minus size={14} />
                           </button>
                           <span className="w-5 text-center text-sm font-bold">{picked}</span>
-                          <button className="p-1.5" onClick={() => setQty(item.id, picked + 1, left)} aria-label="Ajouter">
+                          <button className="flex h-10 w-10 items-center justify-center" onClick={() => setQty(item.id, picked + 1, left)} aria-label={t("order.more")}>
                             <Plus size={14} />
                           </button>
                         </motion.div>
@@ -151,19 +160,21 @@ export function PaymentHistory({
   discounts?: BillDiscount[];
   onReprint: (id: string) => void;
 }) {
+  const { t } = useTranslation();
+  const lang = useLang();
   if (payments.length === 0 && discounts.length === 0) return null;
   return (
     <section className="rounded-xl border border-slate-200 bg-white">
       <h3 className="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Versements et remises
+        {t("cashier.paymentsAndDiscounts")}
       </h3>
       <ul className="divide-y divide-slate-100 text-sm">
         {discounts.map((d) => (
           <li key={d.id} className="flex items-center gap-3 bg-amber-50/50 px-3 py-2">
             <div className="min-w-0 flex-1">
               <div className="font-medium">
-                Remise {d.kind === "PERCENT" ? `${d.value} %` : ""}
-                <span className="font-normal text-slate-500"> · {d.reason}</span>
+                {t("cashier.discount")} {d.kind === "PERCENT" ? formatPercent(d.value, lang) : ""}
+                <span className="font-normal text-slate-500"> · {discountReason(d.reason, lang)}</span>
               </div>
               <div className="text-xs text-slate-500">
                 {formatTime(d.createdAt)} · {d.cashier.name}
@@ -177,18 +188,18 @@ export function PaymentHistory({
           <li key={p.id} className="flex items-center gap-3 px-3 py-2">
             <div className="min-w-0 flex-1">
               <div className="font-medium">
-                {paymentModeLabel[p.mode]}
-                {p.label && <span className="font-normal text-slate-500"> · {p.label}</span>}
+                {t(`paymentModes.${p.mode}`)}
+                {p.label && <span className="font-normal text-slate-500"> · {paymentLabel(p.label, t)}</span>}
               </div>
               <div className="text-xs text-slate-500">
-                Ticket #{p.number} · {formatTime(p.createdAt)} · {p.cashier.name}
+                {t("cashier.receiptNumber", { number: p.number })} · {formatTime(p.createdAt)} · {p.cashier.name}
               </div>
             </div>
             <span className="font-semibold text-emerald-700">{formatPrice(p.amount)}</span>
             <button
               onClick={() => onReprint(p.id)}
               className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
-              aria-label={`Réimprimer le ticket ${p.number}`}
+              aria-label={t("cashier.reprint", { number: p.number })}
             >
               <Printer size={16} />
             </button>

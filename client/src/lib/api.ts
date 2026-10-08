@@ -1,4 +1,5 @@
 import { useAuth } from "../store/auth";
+import { currentLang } from "../i18n";
 
 export class ApiError extends Error {
   constructor(
@@ -20,6 +21,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: {
       // FormData (upload d'image) : le navigateur fixe lui-même le boundary multipart
       ...(!(init.body instanceof FormData) && { "content-type": "application/json" }),
+      // Messages d'erreur de l'API dans la langue de l'écran
+      "accept-language": currentLang(),
       ...init.headers,
     },
   });

@@ -23,7 +23,7 @@ const IN_KITCHEN: OrderStatus[] = ["PENDING", "PREPARING"];
 
 const paymentInclude = {
   cashier: { select: { id: true, name: true } },
-  items: { include: { orderItem: { select: { name: true, unitPrice: true } } } },
+  items: { include: { orderItem: { select: { nameFr: true, nameEn: true, unitPrice: true } } } },
 } satisfies Prisma.PaymentInclude;
 
 function billWhere(target: BillTarget): Prisma.OrderWhereInput {
@@ -71,15 +71,15 @@ async function loadBill(tx: Tx, target: BillTarget) {
 
 export async function getTableBill(tableId: string) {
   const table = await prisma.table.findUnique({ where: { id: tableId } });
-  if (!table) throw new HttpError(404, "Table introuvable");
+  if (!table) throw new HttpError(404, "table.notFound");
   const bill = await loadBill(prisma, { tableId });
   return { target: { kind: "table" as const, table }, ...bill };
 }
 
 export async function getOrderBill(orderId: string) {
   const order = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!order) throw new HttpError(404, "Commande introuvable");
-  if (order.tableId) throw new HttpError(400, "Ce bon appartient à une table : encaissez l'addition de la table");
+  if (!order) throw new HttpError(404, "order.notFound");
+  if (order.tableId) throw new HttpError(400, "checkout.tableOrder");
   const bill = await loadBill(prisma, { orderId });
   return { target: { kind: "order" as const, order: { id: order.id, number: order.number, type: order.type } }, ...bill };
 }
@@ -160,9 +160,9 @@ export const payInputSchema = z
   })
   .strict()
   .refine((p) => Boolean(p.tableId) !== Boolean(p.orderId), {
-    message: "Indiquez soit une table, soit un bon à emporter",
+    message: "validation.tableOrOrder",
   })
-  .refine((p) => p.items || p.amount, { message: "Montant ou articles requis", path: ["amount"] });
+  .refine((p) => p.items || p.amount, { message: "validation.amountOrItems", path: ["amount"] });
 
 export type PayInput = z.input<typeof payInputSchema>;
 
@@ -190,10 +190,10 @@ export interface PayResult extends BillChange {
 async function lockTarget(tx: Tx, target: BillTarget) {
   if (target.tableId) {
     const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Table" WHERE id = ${target.tableId} FOR UPDATE`;
-    if (!locked.length) throw new HttpError(404, "Table introuvable");
+    if (!locked.length) throw new HttpError(404, "table.notFound");
   } else {
     const locked = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Order" WHERE id = ${target.orderId} FOR UPDATE`;
-    if (!locked.length) throw new HttpError(404, "Commande introuvable");
+    if (!locked.length) throw new HttpError(404, "order.notFound");
   }
 }
 
@@ -236,8 +236,8 @@ export async function recordPayment(raw: unknown, actor: Actor): Promise<PayResu
       await lockTarget(tx, target);
 
       const bill = await loadBill(tx, target);
-      if (!bill.orders.length) throw new HttpError(409, "Rien à encaisser : l'addition est peut-être déjà soldée");
-      if (bill.totals.remaining === 0) throw new HttpError(409, "Cette addition est déjà soldée");
+      if (!bill.orders.length) throw new HttpError(409, "checkout.nothingToPay");
+      if (bill.totals.remaining === 0) throw new HttpError(409, "checkout.alreadySettled");
 
       // --- Montant imputé ---------------------------------------------------
       let amount: number;
@@ -249,9 +249,9 @@ export async function recordPayment(raw: unknown, actor: Actor): Promise<PayResu
         input.items.forEach((i) => merged.set(i.orderItemId, (merged.get(i.orderItemId) ?? 0) + i.quantity));
         paidItems = [...merged].map(([orderItemId, quantity]) => {
           const item = byId.get(orderItemId);
-          if (!item) throw new HttpError(400, "Article absent de cette addition");
+          if (!item) throw new HttpError(400, "checkout.itemNotInBill");
           if (quantity > item.quantity - item.paidQuantity) {
-            throw new HttpError(409, `« ${item.name} » : quantité supérieure au reste à payer`);
+            throw new HttpError(409, "checkout.qtyExceeds", { name_fr: item.nameFr, name_en: item.nameEn });
           }
           return { orderItemId, quantity, amount: quantity * item.unitPrice };
         });
@@ -261,10 +261,7 @@ export async function recordPayment(raw: unknown, actor: Actor): Promise<PayResu
       }
 
       if (amount > bill.totals.remaining) {
-        throw new HttpError(
-          409,
-          `Montant supérieur au solde restant (${bill.totals.remaining} ${restaurantInfo.currency})`,
-        );
+        throw new HttpError(409, "checkout.amountExceeds", { remaining: bill.totals.remaining, currency: restaurantInfo.currency });
       }
 
       // --- Espèces : rendu de monnaie -------------------------------------
@@ -272,7 +269,7 @@ export async function recordPayment(raw: unknown, actor: Actor): Promise<PayResu
       let changeReturned = 0;
       if (input.mode === "CASH") {
         amountReceived = input.amountReceived ?? amount;
-        if (amountReceived < amount) throw new HttpError(400, "Montant remis insuffisant");
+        if (amountReceived < amount) throw new HttpError(400, "checkout.cashInsufficient");
         changeReturned = amountReceived - amount;
       }
 
@@ -326,11 +323,11 @@ export const discountInputSchema = z
     orderId: idSchema.optional(),
     kind: z.enum(["PERCENT", "AMOUNT"]),
     value: z.number().int().positive(),
-    reason: z.string().trim().min(3, "Motif obligatoire (3 caractères minimum)").max(120),
+    reason: z.string().trim().min(3, "validation.reasonRequired").max(120),
   })
   .strict()
-  .refine((d) => Boolean(d.tableId) !== Boolean(d.orderId), { message: "Indiquez soit une table, soit un bon à emporter" })
-  .refine((d) => d.kind !== "PERCENT" || d.value <= 100, { message: "Pourcentage entre 1 et 100", path: ["value"] });
+  .refine((d) => Boolean(d.tableId) !== Boolean(d.orderId), { message: "validation.tableOrOrder" })
+  .refine((d) => d.kind !== "PERCENT" || d.value <= 100, { message: "validation.percentRange", path: ["value"] });
 
 export interface DiscountResult extends BillChange {
   discount: { id: string; amount: number; reason: string };
@@ -351,19 +348,16 @@ export async function applyDiscount(raw: unknown, actor: Actor): Promise<Discoun
     async (tx) => {
       await lockTarget(tx, target);
       const bill = await loadBill(tx, target);
-      if (!bill.orders.length || bill.totals.remaining === 0) throw new HttpError(409, "Aucune addition ouverte à remiser");
+      if (!bill.orders.length || bill.totals.remaining === 0) throw new HttpError(409, "checkout.noOpenBill");
 
       const amount = input.kind === "PERCENT" ? Math.round((bill.totals.total * input.value) / 100) : input.value;
-      if (amount < 1) throw new HttpError(400, "Remise nulle");
+      if (amount < 1) throw new HttpError(400, "checkout.discountZero");
       if (amount > bill.totals.remaining) {
-        throw new HttpError(409, `La remise dépasse le solde restant (${bill.totals.remaining} ${restaurantInfo.currency})`);
+        throw new HttpError(409, "checkout.discountExceeds", { remaining: bill.totals.remaining, currency: restaurantInfo.currency });
       }
       const cumulatedPct = ((bill.totals.discounted + amount) / bill.totals.total) * 100;
       if (actor.role !== "ADMIN" && cumulatedPct > env.maxCashierDiscountPct + 1e-9) {
-        throw new HttpError(
-          403,
-          `Remise cumulée de ${cumulatedPct.toFixed(1)} % : au-delà de ${env.maxCashierDiscountPct} %, l'accord d'un gérant est requis`,
-        );
+        throw new HttpError(403, "checkout.discountCap", { pct: cumulatedPct.toFixed(1), max: env.maxCashierDiscountPct });
       }
 
       const discount = await tx.discount.create({
@@ -419,7 +413,7 @@ export async function getReceipt(paymentId: string) {
       orders: { include: { items: { orderBy: { id: "asc" } }, server: { select: { name: true } } }, orderBy: { createdAt: "asc" } },
     },
   });
-  if (!payment) throw new HttpError(404, "Paiement introuvable");
+  if (!payment) throw new HttpError(404, "checkout.paymentNotFound");
 
   const orderIds = payment.orders.map((o) => o.id);
   const history = await prisma.payment.findMany({
@@ -447,11 +441,14 @@ export async function getReceipt(paymentId: string) {
     servers: [...new Set(payment.orders.map((o) => o.server.name))],
     table: payment.table?.number ?? null,
     orderType: first?.type ?? "DINE_IN",
+    /** Langue du client (langue de prise de commande) : langue par défaut du ticket */
+    language: payment.orders.some((o) => o.language === "EN") ? "EN" : "FR",
     orderNumbers: payment.orders.map((o) => o.number),
     lines: payment.orders.flatMap((o) =>
       o.items.map((i) => ({
         id: i.id,
-        name: i.name,
+        nameFr: i.nameFr,
+        nameEn: i.nameEn,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
         total: i.quantity * i.unitPrice,
@@ -459,7 +456,12 @@ export async function getReceipt(paymentId: string) {
       })),
     ),
     /** Articles réglés par ce versement (paiement par sélection d'articles). */
-    paidLines: payment.items.map((i) => ({ name: i.orderItem.name, quantity: i.quantity, amount: i.amount })),
+    paidLines: payment.items.map((i) => ({
+      nameFr: i.orderItem.nameFr,
+      nameEn: i.orderItem.nameEn,
+      quantity: i.quantity,
+      amount: i.amount,
+    })),
     payment: {
       mode: payment.mode,
       label: payment.label,
@@ -468,7 +470,8 @@ export async function getReceipt(paymentId: string) {
       changeReturned: payment.changeReturned,
       reference: payment.reference,
     },
-    discounts: discounts.map((d) => ({ reason: d.reason, amount: d.amount, label: d.kind === "PERCENT" ? `${d.value} %` : null })),
+    // Pourcentage brut : mis en forme dans la langue du ticket côté écran
+    discounts: discounts.map((d) => ({ reason: d.reason, amount: d.amount, percent: d.kind === "PERCENT" ? d.value : null })),
     history: history.map((h) => ({ number: h.number, mode: h.mode, amount: h.amount, label: h.label, createdAt: h.createdAt })),
     totals: {
       total,

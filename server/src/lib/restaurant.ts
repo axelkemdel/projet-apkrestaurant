@@ -8,5 +8,6 @@ export const restaurantInfo = {
   nif: process.env.RESTAURANT_NIF ?? "",
   rccm: process.env.RESTAURANT_RCCM ?? "",
   footer: process.env.RECEIPT_FOOTER ?? "Merci de votre visite !",
+  footerEn: process.env.RECEIPT_FOOTER_EN ?? "Thank you for your visit!",
   currency: process.env.CURRENCY_LABEL ?? "FCFA",
 };

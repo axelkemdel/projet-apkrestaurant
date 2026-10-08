@@ -25,9 +25,10 @@ validateIdParams(adminRouter, "id");
 adminRouter.use(requireAuth("ADMIN"));
 
 const id = (v: unknown) => String(v);
-const menuEvent = (item: { id: string; name: string; isAvailable: boolean; isArchived: boolean }) => ({
+const menuEvent = (item: { id: string; nameFr: string; nameEn: string; isAvailable: boolean; isArchived: boolean }) => ({
   id: item.id,
-  name: item.name,
+  nameFr: item.nameFr,
+  nameEn: item.nameEn,
   isAvailable: item.isAvailable,
   isArchived: item.isArchived,
 });

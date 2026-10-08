@@ -8,6 +8,7 @@ import { authenticate, SESSION_COOKIE, type AuthUser } from "./lib/auth.js";
 import { idSchema, isAllowedOrigin } from "./lib/security.js";
 import type { Actor } from "./lib/audit.js";
 import { HttpError, toErrorPayload } from "./lib/errors.js";
+import { parseLang, type Lang } from "./lib/i18n.js";
 import { createOrder, updateOrderStatus, type OrderWithRelations } from "./services/orders.js";
 import type { BillChange, PayResult } from "./services/checkout.js";
 import { releaseTableIfIdle } from "./services/tables.js";
@@ -38,7 +39,7 @@ export interface ServerToClientEvents {
 
 export interface MenuEvent {
   action: "created" | "updated" | "deleted" | "availability" | "categories";
-  item?: { id: string; name: string; isAvailable: boolean; isArchived: boolean };
+  item?: { id: string; nameFr: string; nameEn: string; isAvailable: boolean; isArchived: boolean };
 }
 
 export interface PaymentEvent {
@@ -55,11 +56,14 @@ type Ack<T> = (res: { ok: true; data: T } | { ok: false; error: string }) => voi
 export interface ClientToServerEvents {
   new_order: (payload: unknown, ack: Ack<OrderWithRelations>) => void;
   order_status: (payload: unknown, ack: Ack<OrderWithRelations>) => void;
+  set_lang: (lang: unknown) => void;
 }
 
 interface SocketData {
   user: AuthUser;
   ip: string | null;
+  /** Langue de l'écran, pour traduire les erreurs renvoyées dans les accusés de réception */
+  lang: Lang;
 }
 
 /** IP de l'appareil : X-Forwarded-For seulement si la connexion vient d'un proxy local (cf. TRUST_PROXY). */
@@ -169,12 +173,12 @@ function canUpdateStatus(user: AuthUser, status: string) {
   return user.role === "SERVEUR" && status === "SERVED";
 }
 
-async function withAck<T>(ack: unknown, fn: () => Promise<T>) {
+async function withAck<T>(ack: unknown, fn: () => Promise<T>, lang: Lang = "fr") {
   const reply = typeof ack === "function" ? (ack as Ack<T>) : () => {};
   try {
     reply({ ok: true, data: await fn() });
   } catch (err) {
-    reply({ ok: false, error: toErrorPayload(err).error });
+    reply({ ok: false, error: toErrorPayload(err, lang).error });
   }
 }
 
@@ -197,6 +201,7 @@ export function initRealtime(httpServer: HttpServer): IO {
       const { user } = await authenticate(cookies[SESSION_COOKIE]);
       socket.data.user = user;
       socket.data.ip = clientIp(socket);
+      socket.data.lang = parseLang(socket.handshake.auth?.lang);
       next();
     } catch {
       next(new Error("Session expirée"));
@@ -209,22 +214,27 @@ export function initRealtime(httpServer: HttpServer): IO {
 
     socket.on("new_order", (payload, ack) =>
       withAck(ack, async () => {
-        if (!canSendOrders(user)) throw new HttpError(403, "Rôle non autorisé à envoyer des commandes");
+        if (!canSendOrders(user)) throw new HttpError(403, "order.roleCannotSend");
         const order = await createOrder(payload, user.id);
         broadcastNewOrder(order);
         return order;
-      }),
+      }, socket.data.lang),
     );
+
+    // L'écran change de langue : les erreurs suivantes lui sont renvoyées dans cette langue
+    socket.on("set_lang", (lang) => {
+      socket.data.lang = parseLang(lang);
+    });
 
     socket.on("order_status", (payload, ack) =>
       withAck(ack, async () => {
         const { orderId, status } = orderStatusPayload.parse(payload);
-        if (!canUpdateStatus(user, status)) throw new HttpError(403, "Action non autorisée pour ce rôle");
+        if (!canUpdateStatus(user, status)) throw new HttpError(403, "order.actionForbidden");
         const actor: Actor = { ...user, ip: socket.data.ip };
         const order = await updateOrderStatus(orderId, { status }, actor);
         await broadcastOrderUpdated(order);
         return order;
-      }),
+      }, socket.data.lang),
     );
   });
 

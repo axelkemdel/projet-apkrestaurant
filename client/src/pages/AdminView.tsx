@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { NavLink } from "react-router-dom";
 import { BarChart3, BookOpen, ChefHat, ChevronsLeft, ChevronsRight, LayoutGrid, ScrollText, Users, UtensilsCrossed, Wallet } from "lucide-react";
 import { AppHeader } from "../components/AppHeader";
+import { useTranslation } from "react-i18next";
 import { Modal } from "../components/Modal";
 import { StatsTab } from "../components/admin/StatsTab";
 import { MenuTab } from "../components/admin/MenuTab";
@@ -10,17 +11,17 @@ import { StaffTab } from "../components/admin/StaffTab";
 import { AuditTab } from "../components/admin/AuditTab";
 
 const TABS = [
-  { id: "stats", label: "Aperçu / Stats", short: "Stats", Icon: BarChart3 },
-  { id: "menu", label: "Gestion du menu", short: "Menu", Icon: BookOpen },
-  { id: "staff", label: "Personnel & PIN", short: "Équipe", Icon: Users },
-  { id: "audit", label: "Journal d'audit", short: "Audit", Icon: ScrollText },
+  { id: "stats", label: "admin.tabStats", short: "admin.shortStats", Icon: BarChart3 },
+  { id: "menu", label: "admin.tabMenu", short: "admin.shortMenu", Icon: BookOpen },
+  { id: "staff", label: "admin.tabStaff", short: "admin.shortStaff", Icon: Users },
+  { id: "audit", label: "admin.tabAudit", short: "admin.shortAudit", Icon: ScrollText },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-const VIEWS = [
-  { to: "/serveur", label: "Salle (serveurs)", Icon: UtensilsCrossed },
-  { to: "/cuisine", label: "Cuisine & Bar", Icon: ChefHat },
-  { to: "/caisse", label: "Caisse", Icon: Wallet },
+const VIEWS: { to: string; label: "nav.floorLong" | "nav.kitchenLong" | "nav.cashier"; Icon: typeof Wallet }[] = [
+  { to: "/serveur", label: "nav.floorLong", Icon: UtensilsCrossed },
+  { to: "/cuisine", label: "nav.kitchenLong", Icon: ChefHat },
+  { to: "/caisse", label: "nav.cashier", Icon: Wallet },
 ];
 
 function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
@@ -51,6 +52,7 @@ function defaultCollapsed() {
  *  - grand écran (> 1024 px) : barre latérale dépliée, contenu centré (max-w-7xl).
  */
 export function AdminView() {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<TabId>(() => readPref("admin-tab", TABS.map((t) => t.id), "stats"));
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [viewsOpen, setViewsOpen] = useState(false);
@@ -78,7 +80,7 @@ export function AdminView() {
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader title={current.label} hideNav />
+      <AppHeader title={t(current.label)} hideNav />
       <div className="flex min-h-0 flex-1">
         {/* Barre latérale : tablette et plus */}
         <motion.aside
@@ -92,14 +94,14 @@ export function AdminView() {
                 key={id}
                 role="tab"
                 aria-selected={tab === id}
-                title={collapsed ? label : undefined}
+                title={collapsed ? t(label) : undefined}
                 onClick={() => setTab(id)}
                 className={`flex min-h-12 items-center gap-3 rounded-xl px-3.5 text-sm font-semibold whitespace-nowrap ${
                   tab === id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 <Icon size={20} className="shrink-0" />
-                <span className={collapsed ? "sr-only" : ""}>{label}</span>
+                <span className={collapsed ? "sr-only" : ""}>{t(label)}</span>
               </button>
             ))}
             <div className="my-2 border-t border-slate-100" />
@@ -107,21 +109,21 @@ export function AdminView() {
               <NavLink
                 key={to}
                 to={to}
-                title={collapsed ? label : undefined}
+                title={collapsed ? t(label) : undefined}
                 className="flex min-h-12 items-center gap-3 rounded-xl px-3.5 text-sm font-medium whitespace-nowrap text-slate-500 hover:bg-slate-100"
               >
                 <Icon size={20} className="shrink-0" />
-                <span className={collapsed ? "sr-only" : ""}>{label}</span>
+                <span className={collapsed ? "sr-only" : ""}>{t(label)}</span>
               </NavLink>
             ))}
           </nav>
           <button
             onClick={toggleSidebar}
             className="m-3 flex min-h-12 items-center justify-center gap-2 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-100"
-            aria-label={collapsed ? "Déplier le menu" : "Replier le menu"}
+            aria-label={collapsed ? t("admin.expandMenu") : t("admin.collapseMenu")}
           >
             {collapsed ? <ChevronsRight size={20} /> : <ChevronsLeft size={20} />}
-            {!collapsed && "Replier"}
+            {!collapsed && t("admin.collapse")}
           </button>
         </motion.aside>
 
@@ -151,20 +153,20 @@ export function AdminView() {
           >
             {tab === id && <motion.span layoutId="bottom-tab" className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-brand-500" />}
             <Icon size={22} />
-            {short}
+            {t(short)}
           </button>
         ))}
         <button onClick={() => setViewsOpen(true)} className="flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-slate-500">
           <LayoutGrid size={22} />
-          Écrans
+          {t("admin.screens")}
         </button>
       </nav>
 
-      <Modal open={viewsOpen} onClose={() => setViewsOpen(false)} title="Autres écrans">
+      <Modal open={viewsOpen} onClose={() => setViewsOpen(false)} title={t("admin.otherScreens")}>
         <div className="grid gap-2">
           {VIEWS.map(({ to, label, Icon }) => (
             <NavLink key={to} to={to} className="flex min-h-14 items-center gap-3 rounded-xl bg-slate-50 px-4 font-semibold text-slate-700 active:bg-slate-100">
-              <Icon size={20} /> {label}
+              <Icon size={20} /> {t(label)}
             </NavLink>
           ))}
         </div>

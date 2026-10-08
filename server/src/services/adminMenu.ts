@@ -4,28 +4,11 @@ import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { deleteDishImage, isLocalDishImage, saveDishImage } from "../lib/uploads.js";
 import { audit, type Actor } from "../lib/audit.js";
+import { normalizeOptions, optionsInputSchema } from "../lib/menuOptions.js";
 
 // ---------------------------------------------------------------------------
 // Validation (les champs arrivent en multipart/form-data, donc en texte)
 // ---------------------------------------------------------------------------
-
-const label = z.string().trim().min(1).max(40);
-const uniqueLabels = z
-  .array(label)
-  .max(12)
-  .refine((a) => new Set(a.map((v) => v.toLowerCase())).size === a.length, "Valeurs en double");
-
-const optionsSchema = z
-  .object({
-    cooking: uniqueLabels.optional(),
-    sides: uniqueLabels.optional(),
-    extras: z
-      .array(z.object({ name: label, price: z.number().int().min(0).max(1_000_000) }))
-      .max(15)
-      .refine((a) => new Set(a.map((e) => e.name.toLowerCase())).size === a.length, "Suppléments en double")
-      .optional(),
-  })
-  .strict();
 
 const jsonField = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess((v) => {
@@ -45,16 +28,19 @@ const imageUrlField = z
   .string()
   .trim()
   .max(500)
-  .refine((u) => u === "" || isLocalDishImage(u) || /^https?:\/\/[^\s"'<>]+$/i.test(u), "URL d'image invalide (http/https)");
+  .refine((u) => u === "" || isLocalDishImage(u) || /^https?:\/\/[^\s"'<>]+$/i.test(u), "validation.imageUrl");
 
+// Carte bilingue : nom obligatoire dans les deux langues, descriptions facultatives
 const itemFields = {
-  name: z.string().trim().min(1, "Nom requis").max(80),
-  description: z.string().trim().max(300).optional(),
-  price: z.coerce.number().int("Prix entier en FCFA").min(0).max(10_000_000),
-  categoryId: z.string().min(1, "Catégorie requise"),
+  nameFr: z.string({ required_error: "validation.nameRequired" }).trim().min(1, "validation.nameRequired").max(80),
+  nameEn: z.string({ required_error: "validation.nameRequired" }).trim().min(1, "validation.nameRequired").max(80),
+  descriptionFr: z.string().trim().max(300).optional(),
+  descriptionEn: z.string().trim().max(300).optional(),
+  price: z.coerce.number().int("validation.priceInteger").min(0).max(10_000_000),
+  categoryId: z.string({ required_error: "validation.categoryRequired" }).min(1, "validation.categoryRequired"),
   isAvailable: boolField.optional(),
   isArchived: boolField.optional(),
-  options: jsonField(optionsSchema.nullable()).optional(),
+  options: jsonField(optionsInputSchema.nullable()).optional(),
   imageUrl: imageUrlField.optional(),
   removeImage: boolField.optional(),
 };
@@ -62,7 +48,7 @@ const itemFields = {
 const createItemSchema = z.object(itemFields).strict();
 const updateItemSchema = z.object(itemFields).partial().strict();
 
-function cleanOptions(o: z.infer<typeof optionsSchema> | null | undefined) {
+function cleanOptions(o: z.infer<typeof optionsInputSchema> | null | undefined) {
   if (!o) return Prisma.DbNull;
   const cleaned = {
     ...(o.cooking?.length && { cooking: o.cooking }),
@@ -77,7 +63,7 @@ const adminItemInclude = { _count: { select: { orderItems: true } } } satisfies 
 function toAdminItem(item: Prisma.MenuItemGetPayload<{ include: typeof adminItemInclude }>) {
   const { _count, ...rest } = item;
   // Un plat déjà commandé ne peut pas être supprimé (historique des ventes) : seulement masqué
-  return { ...rest, timesOrdered: _count.orderItems, deletable: _count.orderItems === 0 };
+  return { ...rest, options: normalizeOptions(rest.options), timesOrdered: _count.orderItems, deletable: _count.orderItems === 0 };
 }
 
 // ---------------------------------------------------------------------------
@@ -87,14 +73,14 @@ function toAdminItem(item: Prisma.MenuItemGetPayload<{ include: typeof adminItem
 export async function listAdminMenu() {
   const categories = await prisma.category.findMany({
     orderBy: { order: "asc" },
-    include: { items: { orderBy: { name: "asc" }, include: adminItemInclude } },
+    include: { items: { orderBy: { nameFr: "asc" }, include: adminItemInclude } },
   });
   return categories.map((c) => ({ ...c, items: c.items.map(toAdminItem) }));
 }
 
 async function assertCategory(categoryId: string) {
   if (!(await prisma.category.findUnique({ where: { id: categoryId } }))) {
-    throw new HttpError(400, "Catégorie introuvable");
+    throw new HttpError(400, "menu.categoryNotFound");
   }
 }
 
@@ -114,8 +100,10 @@ export async function createMenuItem(raw: unknown, actor: Actor, file?: Express.
     const item = await prisma.$transaction(async (tx) => {
       const created = await tx.menuItem.create({
       data: {
-        name: input.name,
-        description: input.description || null,
+        nameFr: input.nameFr,
+        nameEn: input.nameEn,
+        descriptionFr: input.descriptionFr || null,
+        descriptionEn: input.descriptionEn || null,
         price: input.price,
         categoryId: input.categoryId,
         isAvailable: input.isAvailable ?? true,
@@ -125,7 +113,12 @@ export async function createMenuItem(raw: unknown, actor: Actor, file?: Express.
       },
       include: adminItemInclude,
       });
-      await audit(tx, actor, "MENU_ITEM_CREATED", { menuItemId: created.id, name: created.name, price: created.price });
+      await audit(tx, actor, "MENU_ITEM_CREATED", {
+        menuItemId: created.id,
+        nameFr: created.nameFr,
+        nameEn: created.nameEn,
+        price: created.price,
+      });
       return created;
     });
     return toAdminItem(item);
@@ -138,7 +131,7 @@ export async function createMenuItem(raw: unknown, actor: Actor, file?: Express.
 export async function updateMenuItem(id: string, raw: unknown, actor: Actor, file?: Express.Multer.File) {
   const input = updateItemSchema.parse(raw);
   const current = await prisma.menuItem.findUnique({ where: { id } });
-  if (!current) throw new HttpError(404, "Plat introuvable");
+  if (!current) throw new HttpError(404, "menu.itemNotFound");
   if (input.categoryId) await assertCategory(input.categoryId);
 
   const image = await resolveImage(file, input.imageUrl, input.removeImage);
@@ -147,8 +140,10 @@ export async function updateMenuItem(id: string, raw: unknown, actor: Actor, fil
       const updated = await tx.menuItem.update({
       where: { id },
       data: {
-        name: input.name,
-        description: input.description === undefined ? undefined : input.description || null,
+        nameFr: input.nameFr,
+        nameEn: input.nameEn,
+        descriptionFr: input.descriptionFr === undefined ? undefined : input.descriptionFr || null,
+        descriptionEn: input.descriptionEn === undefined ? undefined : input.descriptionEn || null,
         price: input.price,
         categoryId: input.categoryId,
         isAvailable: input.isAvailable,
@@ -162,7 +157,8 @@ export async function updateMenuItem(id: string, raw: unknown, actor: Actor, fil
       if (input.price !== undefined && input.price !== current.price) {
         await audit(tx, actor, "MENU_PRICE_CHANGED", {
           menuItemId: id,
-          name: updated.name,
+          nameFr: updated.nameFr,
+          nameEn: updated.nameEn,
           oldPrice: current.price,
           newPrice: input.price,
         });
@@ -181,7 +177,7 @@ export async function updateMenuItem(id: string, raw: unknown, actor: Actor, fil
 export async function setAvailability(id: string, raw: unknown) {
   const { isAvailable } = z.object({ isAvailable: z.boolean().optional() }).strict().parse(raw ?? {});
   const current = await prisma.menuItem.findUnique({ where: { id }, select: { isAvailable: true } });
-  if (!current) throw new HttpError(404, "Plat introuvable");
+  if (!current) throw new HttpError(404, "menu.itemNotFound");
   // Sans valeur explicite : bascule. Avec valeur : idempotent (deux gérants qui cliquent ne s'annulent pas).
   const item = await prisma.menuItem.update({
     where: { id },
@@ -193,14 +189,14 @@ export async function setAvailability(id: string, raw: unknown) {
 
 export async function deleteMenuItem(id: string, actor: Actor) {
   const item = await prisma.menuItem.findUnique({ where: { id }, include: adminItemInclude });
-  if (!item) throw new HttpError(404, "Plat introuvable");
+  if (!item) throw new HttpError(404, "menu.itemNotFound");
   if (item._count.orderItems > 0) {
-    throw new HttpError(409, "Ce plat figure dans des commandes passées : masquez-le plutôt que de le supprimer");
+    throw new HttpError(409, "menu.cannotDeleteOrdered");
   }
   await prisma.$transaction([
     prisma.menuItem.delete({ where: { id } }),
     prisma.auditLog.create({
-      data: { userId: actor.id, ipAddress: actor.ip, action: "MENU_ITEM_DELETED", details: { menuItemId: id, name: item.name, price: item.price } },
+      data: { userId: actor.id, ipAddress: actor.ip, action: "MENU_ITEM_DELETED", details: { menuItemId: id, nameFr: item.nameFr, nameEn: item.nameEn, price: item.price } },
     }),
   ]);
   await deleteDishImage(item.imageUrl);
@@ -212,14 +208,15 @@ export async function deleteMenuItem(id: string, actor: Actor) {
 // ---------------------------------------------------------------------------
 
 const categorySchema = z.object({
-  name: z.string().trim().min(1).max(40),
+  nameFr: z.string({ required_error: "validation.nameRequired" }).trim().min(1, "validation.nameRequired").max(40),
+  nameEn: z.string({ required_error: "validation.nameRequired" }).trim().min(1, "validation.nameRequired").max(40),
   station: z.enum(["KITCHEN", "BAR"]),
   order: z.number().int().min(0).max(999).optional(),
 }).strict();
 
 function uniqueNameError(e: unknown) {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"
-    ? new HttpError(409, "Une catégorie porte déjà ce nom")
+    ? new HttpError(409, "menu.categoryExists")
     : e;
 }
 
@@ -233,13 +230,13 @@ export async function createCategory(raw: unknown) {
 
 export async function updateCategory(id: string, raw: unknown) {
   const input = categorySchema.partial().parse(raw);
-  if (!(await prisma.category.findUnique({ where: { id } }))) throw new HttpError(404, "Catégorie introuvable");
+  if (!(await prisma.category.findUnique({ where: { id } }))) throw new HttpError(404, "menu.categoryNotFound");
   return prisma.category.update({ where: { id }, data: input }).catch((e) => Promise.reject(uniqueNameError(e)));
 }
 
 export async function deleteCategory(id: string) {
   const category = await prisma.category.findUnique({ where: { id }, include: { _count: { select: { items: true } } } });
-  if (!category) throw new HttpError(404, "Catégorie introuvable");
-  if (category._count.items > 0) throw new HttpError(409, "Déplacez ou supprimez d'abord les plats de cette catégorie");
+  if (!category) throw new HttpError(404, "menu.categoryNotFound");
+  if (category._count.items > 0) throw new HttpError(409, "menu.categoryNotEmpty");
   await prisma.category.delete({ where: { id } });
 }

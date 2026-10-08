@@ -11,78 +11,92 @@ const users: { name: string; role: Role; pin: string }[] = [
   { name: "Caisse", role: "CAISSE", pin: "4444" },
 ];
 
+type L = { fr: string; en: string };
+const l = (fr: string, en: string): L => ({ fr, en });
+const COOKING = [l("Bleu", "Blue rare"), l("Saignant", "Rare"), l("À point", "Medium"), l("Bien cuit", "Well done")];
+
+// Carte bilingue : [français, anglais] pour chaque libellé
 const menu: {
-  name: string;
+  name: L;
   station: Station;
-  items: { name: string; price: number; description?: string; options?: object }[];
+  items: { name: L; price: number; description?: L; options?: object }[];
 }[] = [
   {
-    name: "Entrées",
+    name: l("Entrées", "Starters"),
     station: "KITCHEN",
     items: [
-      { name: "Salade composée", price: 2500, description: "Laitue, tomate, avocat, œuf" },
-      { name: "Alloco", price: 1500, description: "Bananes plantain frites, sauce pimentée" },
-      { name: "Nems (x4)", price: 2000 },
+      { name: l("Salade composée", "Mixed salad"), price: 2500, description: l("Laitue, tomate, avocat, œuf", "Lettuce, tomato, avocado, egg") },
+      { name: l("Alloco", "Alloco (fried plantain)"), price: 1500, description: l("Bananes plantain frites, sauce pimentée", "Fried plantain, spicy sauce") },
+      { name: l("Nems (x4)", "Spring rolls (x4)"), price: 2000 },
     ],
   },
   {
-    name: "Plats",
+    name: l("Plats", "Main courses"),
     station: "KITCHEN",
     items: [
       {
-        name: "Poulet braisé",
+        name: l("Poulet braisé", "Grilled chicken"),
         price: 5000,
-        description: "Demi-poulet, attiéké ou frites",
+        description: l("Demi-poulet, attiéké ou frites", "Half chicken, attiéké or fries"),
         options: {
-          sides: ["Attiéké", "Frites", "Riz"],
-          extras: [{ name: "Sauce piment", price: 0 }, { name: "Oignons frits", price: 300 }],
+          sides: [l("Attiéké", "Attiéké (cassava couscous)"), l("Frites", "Fries"), l("Riz", "Rice")],
+          extras: [
+            { ...l("Sauce piment", "Chili sauce"), price: 0 },
+            { ...l("Oignons frits", "Fried onions"), price: 300 },
+          ],
         },
       },
       {
-        name: "Entrecôte grillée",
+        name: l("Entrecôte grillée", "Grilled rib steak"),
         price: 8500,
         options: {
-          cooking: ["Bleu", "Saignant", "À point", "Bien cuit"],
-          sides: ["Frites", "Légumes sautés"],
-          extras: [{ name: "Sauce poivre", price: 500 }, { name: "Œuf au plat", price: 500 }],
+          cooking: COOKING,
+          sides: [l("Frites", "Fries"), l("Légumes sautés", "Sautéed vegetables")],
+          extras: [
+            { ...l("Sauce poivre", "Pepper sauce"), price: 500 },
+            { ...l("Œuf au plat", "Fried egg"), price: 500 },
+          ],
         },
       },
       {
-        name: "Capitaine braisé",
+        name: l("Capitaine braisé", "Grilled Nile perch"),
         price: 7000,
-        options: { sides: ["Attiéké", "Alloco"] },
+        options: { sides: [l("Attiéké", "Attiéké (cassava couscous)"), l("Alloco", "Fried plantain")] },
       },
-      { name: "Riz sauce arachide", price: 3500 },
-      { name: "Tô sauce gombo", price: 2500 },
+      { name: l("Riz sauce arachide", "Rice with peanut sauce"), price: 3500 },
+      { name: l("Tô sauce gombo", "Tô with okra sauce"), price: 2500 },
       {
-        name: "Burger maison",
+        name: l("Burger maison", "House burger"),
         price: 4500,
         options: {
-          cooking: ["Saignant", "À point", "Bien cuit"],
-          extras: [{ name: "Cheddar", price: 500 }, { name: "Bacon", price: 700 }],
+          cooking: COOKING.slice(1),
+          extras: [
+            { ...l("Cheddar", "Cheddar"), price: 500 },
+            { ...l("Bacon", "Bacon"), price: 700 },
+          ],
         },
       },
     ],
   },
   {
-    name: "Desserts",
+    name: l("Desserts", "Desserts"),
     station: "KITCHEN",
     items: [
-      { name: "Salade de fruits", price: 1500 },
-      { name: "Fondant au chocolat", price: 2500 },
-      { name: "Dégué", price: 1000 },
+      { name: l("Salade de fruits", "Fruit salad"), price: 1500 },
+      { name: l("Fondant au chocolat", "Chocolate fondant"), price: 2500 },
+      { name: l("Dégué", "Dégué (millet yogurt)"), price: 1000 },
     ],
   },
   {
-    name: "Boissons",
+    name: l("Boissons", "Drinks"),
     station: "BAR",
     items: [
-      { name: "Bissap", price: 700 },
-      { name: "Jus de gingembre", price: 700 },
-      { name: "Eau minérale 1,5 L", price: 600 },
-      { name: "Coca-Cola", price: 800, options: { extras: [{ name: "Glaçons", price: 0 }] } },
-      { name: "Brakina", price: 1000 },
-      { name: "Café", price: 500, options: { extras: [{ name: "Lait", price: 100 }] } },
+      { name: l("Bissap", "Bissap (hibiscus juice)"), price: 700 },
+      { name: l("Jus de gingembre", "Ginger juice"), price: 700 },
+      { name: l("Eau minérale 1,5 L", "Mineral water 1.5 L"), price: 600 },
+      { name: l("Coca-Cola", "Coca-Cola"), price: 800, options: { extras: [{ ...l("Glaçons", "Ice"), price: 0 }] } },
+      { name: l("Brakina", "Brakina (local beer)"), price: 1000 },
+      { name: l("Café", "Coffee"), price: 500, options: { extras: [{ ...l("Lait", "Milk"), price: 100 }] } },
     ],
   },
 ];
@@ -115,10 +129,20 @@ async function main() {
   for (const [index, cat] of menu.entries()) {
     await prisma.category.create({
       data: {
-        name: cat.name,
+        nameFr: cat.name.fr,
+        nameEn: cat.name.en,
         order: index,
         station: cat.station,
-        items: { create: cat.items },
+        items: {
+          create: cat.items.map((i) => ({
+            nameFr: i.name.fr,
+            nameEn: i.name.en,
+            descriptionFr: i.description?.fr,
+            descriptionEn: i.description?.en,
+            price: i.price,
+            options: i.options,
+          })),
+        },
       },
     });
   }

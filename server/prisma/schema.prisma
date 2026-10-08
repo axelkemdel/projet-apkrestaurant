@@ -32,6 +32,11 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum Language {
+  FR
+  EN
+}
+
 enum OrderType {
   DINE_IN
   TAKEAWAY
@@ -81,7 +86,8 @@ model Table {
 
 model Category {
   id      String  @id @default(cuid())
-  name    String  @unique
+  nameFr  String  @unique
+  nameEn  String
   order   Int     @default(0)
   station Station @default(KITCHEN)
 
@@ -89,19 +95,23 @@ model Category {
 }
 
 model MenuItem {
-  id          String   @id @default(cuid())
-  name        String
-  description String?
-  price       Int
-  categoryId  String
-  isAvailable Boolean  @default(true) // false = rupture de stock (affiché « Épuisé »)
-  isArchived  Boolean  @default(false) // masqué de la carte (conservé pour l'historique)
-  imageUrl    String? // /uploads/dishes/… (téléversé) ou URL externe (CDN)
-  // Options de personnalisation :
-  // { "cooking": ["Saignant", "À point"], "sides": ["Frites", "Riz"], "extras": [{ "name": "Fromage", "price": 500 }] }
-  options     Json?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  // Carte bilingue : le français fait référence (valeur canonique des options)
+  nameFr        String
+  nameEn        String
+  descriptionFr String?
+  descriptionEn String?
+  price         Int
+  categoryId    String
+  isAvailable   Boolean  @default(true) // false = rupture de stock (affiché « Épuisé »)
+  isArchived    Boolean  @default(false) // masqué de la carte (conservé pour l'historique)
+  imageUrl      String? // /uploads/dishes/… (téléversé) ou URL externe (CDN)
+  // Options de personnalisation, chaque libellé en deux langues :
+  // { "cooking": [{ "fr": "Saignant", "en": "Rare" }], "sides": [{ "fr": "Frites", "en": "Fries" }],
+  //   "extras": [{ "fr": "Fromage", "en": "Cheese", "price": 500 }] }
+  options       Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   category   Category    @relation(fields: [categoryId], references: [id])
   orderItems OrderItem[]
@@ -119,6 +129,7 @@ model Order {
   totalAmount  Int          @default(0)
   paymentMode  PaymentMode?
   customerNote String?
+  language     Language     @default(FR) // langue dans laquelle la commande a été prise
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   startedAt    DateTime?
@@ -138,17 +149,22 @@ model Order {
 }
 
 model OrderItem {
-  id           String  @id @default(cuid())
+  id           String   @id @default(cuid())
   orderId      String
   menuItemId   String
-  name         String // copie du nom au moment de la commande
+  // Copie bilingue figée au moment de la commande : la cuisine peut lire le bon
+  // dans sa langue, même si la carte change ensuite
+  nameFr       String
+  nameEn       String
   quantity     Int
   unitPrice    Int // prix de base + suppléments, figé à la commande
-  notes        String? // ex : "sans oignon"
-  // { "cooking": "À point", "side": "Frites", "extras": [{ "name": "Fromage", "price": 500 }] }
+  // Notes rapides codifiées, traduisibles (NO_ONION, NO_CHILI…) ; voir QUICK_NOTES
+  quickNotes   String[] @default([])
+  notes        String? // texte libre saisi par le serveur (non traduit automatiquement)
+  // { "cooking": { "fr": "À point", "en": "Medium" }, "side": {…}, "extras": [{ "fr": "Fromage", "en": "Cheese", "price": 500 }] }
   modifiers    Json?
-  station      Station @default(KITCHEN)
-  paidQuantity Int     @default(0) // quantité déjà réglée (paiement par articles)
+  station      Station  @default(KITCHEN)
+  paidQuantity Int      @default(0) // quantité déjà réglée (paiement par articles)
 
   order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menuItem     MenuItem      @relation(fields: [menuItemId], references: [id])

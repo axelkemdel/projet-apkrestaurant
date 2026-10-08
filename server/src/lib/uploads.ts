@@ -26,7 +26,7 @@ export const imageUpload = multer({
   // 1er filtre : type MIME déclaré (rejet immédiat, avant lecture du fichier)
   fileFilter: (_req, file, cb) => {
     if (Object.hasOwn(ALLOWED_MIME, file.mimetype)) cb(null, true);
-    else cb(new HttpError(400, "Format d'image non supporté (JPEG, PNG ou WebP uniquement)"));
+    else cb(new HttpError(400, "upload.badFormat"));
   },
 }).single("image");
 
@@ -43,7 +43,7 @@ export async function saveDishImage(file: Express.Multer.File): Promise<string> 
   // 2e filtre : signature binaire réelle, qui doit correspondre au type déclaré
   const ext = detectImageType(file.buffer);
   if (!ext || ALLOWED_MIME[file.mimetype as AllowedMime] !== ext) {
-    throw new HttpError(400, "Format d'image non supporté (JPEG, PNG ou WebP uniquement)");
+    throw new HttpError(400, "upload.badFormat");
   }
   // Nom aléatoire : le nom d'origine (potentiellement « ../../x.js ») n'est jamais utilisé
   const name = `${randomUUID()}.${ext}`;

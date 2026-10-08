@@ -12,7 +12,7 @@ import { audit, type Actor } from "../lib/audit.js";
  * réinitialisation, pour être communiqué à l'employé.
  */
 
-const pinSchema = z.string().regex(/^\d{4,6}$/, "Le code PIN doit comporter 4 à 6 chiffres");
+const pinSchema = z.string().regex(/^\d{4,6}$/, "validation.pinFormat");
 const roleSchema = z.enum(["ADMIN", "SERVEUR", "CUISINE", "CAISSE"]);
 
 const userSelect = { id: true, name: true, role: true, isActive: true, createdAt: true } as const;
@@ -43,12 +43,12 @@ export async function createUser(raw: unknown, actor: Actor) {
 /** Empêche de se retirer soi-même l'accès gérant, ou de supprimer le dernier gérant actif. */
 async function assertAdminRemains(targetId: string, actorId: string, next: { role?: Role; isActive?: boolean }) {
   const target = await prisma.user.findUnique({ where: { id: targetId } });
-  if (!target) throw new HttpError(404, "Employé introuvable");
+  if (!target) throw new HttpError(404, "users.notFound");
   const losesAdmin = target.role === "ADMIN" && target.isActive && (next.role !== undefined && next.role !== "ADMIN" || next.isActive === false);
   if (!losesAdmin) return target;
-  if (targetId === actorId) throw new HttpError(409, "Vous ne pouvez pas retirer votre propre accès gérant");
+  if (targetId === actorId) throw new HttpError(409, "users.cannotRemoveOwnAdmin");
   const admins = await prisma.user.count({ where: { role: "ADMIN", isActive: true } });
-  if (admins <= 1) throw new HttpError(409, "Il doit rester au moins un gérant actif");
+  if (admins <= 1) throw new HttpError(409, "users.lastAdmin");
   return target;
 }
 
@@ -88,7 +88,7 @@ export async function updateUser(id: string, raw: unknown, actor: Actor) {
  */
 export async function resetPin(id: string, raw: unknown, actor: Actor) {
   const input = z.object({ pin: pinSchema.optional() }).strict().parse(raw ?? {});
-  if (!(await prisma.user.findUnique({ where: { id } }))) throw new HttpError(404, "Employé introuvable");
+  if (!(await prisma.user.findUnique({ where: { id } }))) throw new HttpError(404, "users.notFound");
   const pin = input.pin ?? generatePin();
   const pinHash = await bcrypt.hash(pin, 10);
   const revoke = id !== actor.id;

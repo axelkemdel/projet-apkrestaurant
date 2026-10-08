@@ -4,7 +4,8 @@ import { Lock, LogOut, Wifi, WifiOff } from "lucide-react";
 import { useAuth } from "../store/auth";
 import { useSocketStatus } from "../lib/socket";
 import { lockSession, logout, IDLE_LOCK_MINUTES } from "../lib/session";
-import { roleLabel } from "../lib/format";
+import { useTranslation } from "react-i18next";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 
 export function AppHeader({
   title,
@@ -18,6 +19,7 @@ export function AppHeader({
   /** Le tableau de bord gérant porte sa propre navigation (barre latérale / barre du bas). */
   hideNav?: boolean;
 }) {
+  const { t } = useTranslation();
   const user = useAuth((s) => s.user);
   const connected = useSocketStatus();
 
@@ -34,12 +36,14 @@ export function AppHeader({
       <h1 className="truncate text-base font-semibold">{title}</h1>
       {user?.role === "ADMIN" && !hideNav && (
         <nav className="hidden gap-1 md:flex">
-          {[
-            ["/serveur", "Salle"],
-            ["/cuisine", "Cuisine"],
-            ["/caisse", "Caisse"],
-            ["/admin", "Gérant"],
-          ].map(([to, label]) => (
+          {(
+            [
+              ["/serveur", t("nav.floor")],
+              ["/cuisine", t("nav.kitchen")],
+              ["/caisse", t("nav.cashier")],
+              ["/admin", t("nav.admin")],
+            ] as const
+          ).map(([to, label]) => (
             <NavLink
               key={to}
               to={to}
@@ -60,22 +64,23 @@ export function AppHeader({
         className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
           connected ? "bg-emerald-500/15 text-emerald-600" : "bg-red-500/15 text-red-600"
         }`}
-        title={connected ? "Temps réel connecté" : "Connexion perdue — reconnexion…"}
+        title={connected ? t("common.realtimeOn") : t("common.realtimeOff")}
       >
         {connected ? <Wifi size={14} /> : <WifiOff size={14} />}
-        <span className="hidden sm:inline">{connected ? "En ligne" : "Hors ligne"}</span>
+        <span className="hidden lg:inline">{connected ? t("common.online") : t("common.offline")}</span>
       </span>
       {user && (
-        <span className="hidden text-sm opacity-70 md:inline">
-          {user.name} · {roleLabel[user.role]}
+        <span className="hidden text-sm opacity-70 xl:inline">
+          {user.name} · {t(`roles.${user.role}`)}
         </span>
       )}
+      <LanguageSwitcher dark={dark} />
       {user && IDLE_LOCK_MINUTES[user.role] && (
         <button
           onClick={() => void lockSession()}
           className={`flex h-11 w-11 items-center justify-center rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
-          aria-label="Verrouiller l'écran"
-          title="Verrouiller l'écran"
+          aria-label={t("common.lockScreen")}
+          title={t("common.lockScreen")}
         >
           <Lock size={18} />
         </button>
@@ -83,7 +88,8 @@ export function AppHeader({
       <button
         onClick={() => void logout()}
         className={`flex h-11 w-11 items-center justify-center rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
-        aria-label="Se déconnecter"
+        aria-label={t("common.logout")}
+        title={t("common.logout")}
       >
         <LogOut size={18} />
       </button>

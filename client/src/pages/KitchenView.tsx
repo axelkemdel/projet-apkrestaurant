@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { BellRing, ChefHat, Martini, Volume2, VolumeX } from "lucide-react";
+import { BellRing, ChefHat, Languages, Martini, Volume2, VolumeX } from "lucide-react";
 import { AppHeader } from "../components/AppHeader";
 import { toast } from "../components/Toasts";
+import { useTranslation } from "react-i18next";
+import { orderLang, useLang } from "../lib/localize";
 import { TicketCard } from "../components/kitchen/TicketCard";
 import { api } from "../lib/api";
 import { emitWithAck, getSocket } from "../lib/socket";
@@ -12,11 +14,22 @@ import type { Order, OrderStatus, Station } from "../types";
 
 type StationFilter = Station | "ALL";
 
-const COLUMNS: { status: OrderStatus; title: string; accent: string }[] = [
-  { status: "PENDING", title: "À préparer", accent: "text-slate-200" },
-  { status: "PREPARING", title: "En cours", accent: "text-amber-400" },
-  { status: "READY", title: "Prêtes", accent: "text-emerald-400" },
+const COLUMNS: { status: OrderStatus; title: "kds.colPending" | "kds.colPreparing" | "kds.colReady"; accent: string }[] = [
+  { status: "PENDING", title: "kds.colPending", accent: "text-slate-200" },
+  { status: "PREPARING", title: "kds.colPreparing", accent: "text-amber-400" },
+  { status: "READY", title: "kds.colReady", accent: "text-emerald-400" },
 ];
+
+/** Langue des bons : celle de l'écran (ex. cuisinier francophone) ou celle de la prise de commande. */
+type TicketLangMode = "screen" | "original";
+
+function readTicketLangMode(): TicketLangMode {
+  try {
+    return localStorage.getItem("kds-ticket-lang") === "original" ? "original" : "screen";
+  } catch {
+    return "screen";
+  }
+}
 
 const ACTIVE: OrderStatus[] = ["PENDING", "PREPARING", "READY"];
 
@@ -37,6 +50,18 @@ export function KitchenView() {
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [fresh, setFresh] = useState<Set<string>>(new Set());
   const [flash, setFlash] = useState<Order | null>(null);
+  const { t } = useTranslation();
+  const screenLang = useLang();
+  const [ticketLangMode, setTicketLangMode] = useState<TicketLangMode>(readTicketLangMode);
+
+  function changeTicketLangMode(mode: TicketLangMode) {
+    setTicketLangMode(mode);
+    try {
+      localStorage.setItem("kds-ticket-lang", mode);
+    } catch {
+      /* préférence non mémorisée */
+    }
+  }
 
   const load = useCallback(() => {
     api<Order[]>("/orders/active")
@@ -127,37 +152,63 @@ export function KitchenView() {
 
   return (
     <div className="flex h-full flex-col bg-slate-950 text-slate-100">
-      <AppHeader title="Cuisine & Bar" dark>
-        <div className="flex rounded-lg bg-slate-800 p-0.5 text-sm">
+      <AppHeader title={t("nav.kitchenLong")} dark />
+      {/* Barre d'outils : filtre de poste, langue des bons, son (défile horizontalement sur petit écran) */}
+      <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-800 px-3 py-2">
+        <div className="flex shrink-0 rounded-lg bg-slate-800 p-0.5 text-sm" role="group" aria-label={t("kds.station")}>
           {(
             [
-              ["ALL", "Tout", null],
-              ["KITCHEN", "Cuisine", ChefHat],
-              ["BAR", "Bar", Martini],
+              ["ALL", "common.all", null],
+              ["KITCHEN", "nav.kitchen", ChefHat],
+              ["BAR", "kds.bar", Martini],
             ] as const
           ).map(([value, label, Icon]) => (
             <button
               key={value}
               onClick={() => setStation(value)}
-              className={`flex items-center gap-1 rounded-md px-3 py-1.5 font-medium ${
+              aria-pressed={station === value}
+              className={`flex min-h-10 items-center gap-1 rounded-md px-3 font-medium ${
                 station === value ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:text-white"
               }`}
             >
               {Icon && <Icon size={14} />}
-              {label}
+              {t(label)}
             </button>
           ))}
         </div>
+        <div className="flex shrink-0 items-center gap-1 rounded-lg bg-slate-800 p-0.5 text-sm" role="group" aria-label={t("kds.ticketLanguage")}>
+          <span className="flex items-center gap-1 px-2 text-xs text-slate-400">
+            <Languages size={14} /> {t("kds.ticketLanguage")}
+          </span>
+          {(
+            [
+              ["screen", "kds.modeScreen"],
+              ["original", "kds.modeOriginal"],
+            ] as const
+          ).map(([mode, label]) => (
+            <button
+              key={mode}
+              onClick={() => changeTicketLangMode(mode)}
+              aria-pressed={ticketLangMode === mode}
+              className={`min-h-10 rounded-md px-3 font-medium whitespace-nowrap ${
+                ticketLangMode === mode ? "bg-slate-100 text-slate-900" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              {t(label, { lang: screenLang.toUpperCase() })}
+            </button>
+          ))}
+        </div>
+        <div className="flex-1" />
         <button
           onClick={toggleSound}
-          className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium ${
+          className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-sm font-medium ${
             soundOn ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300 animate-pulse"
           }`}
         >
           {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
-          <span className="hidden sm:inline">{soundOn ? "Son activé" : "Activer le son"}</span>
+          <span className="whitespace-nowrap">{soundOn ? t("kds.soundOn") : t("kds.enableSound")}</span>
         </button>
-      </AppHeader>
+      </div>
 
       <div className="flex min-h-0 flex-1 snap-x gap-3 overflow-x-auto p-3">
         {COLUMNS.map((col) => {
@@ -165,7 +216,7 @@ export function KitchenView() {
           return (
             <section key={col.status} className="flex min-w-[300px] flex-1 snap-start flex-col rounded-2xl bg-slate-900/60">
               <h2 className={`flex items-center justify-between px-4 py-3 text-sm font-bold uppercase tracking-wider ${col.accent}`}>
-                {col.title}
+                {t(col.title)}
                 <span className="rounded-full bg-slate-800 px-2.5 py-0.5 text-slate-300">{list.length}</span>
               </h2>
               <div className="grid flex-1 auto-rows-min gap-3 overflow-y-auto px-3 pb-3 2xl:grid-cols-2">
@@ -179,10 +230,11 @@ export function KitchenView() {
                       busy={busy.has(o.id)}
                       isNew={fresh.has(o.id)}
                       onAction={advance}
+                      displayLang={ticketLangMode === "screen" ? screenLang : orderLang(o.language)}
                     />
                   ))}
                 </AnimatePresence>
-                {list.length === 0 && <p className="py-10 text-center text-sm text-slate-600">Aucun bon</p>}
+                {list.length === 0 && <p className="py-10 text-center text-sm text-slate-600">{t("kds.noTickets")}</p>}
               </div>
             </section>
           );
@@ -204,7 +256,7 @@ export function KitchenView() {
               className="flex items-center gap-3 rounded-2xl bg-brand-500 px-8 py-5 text-2xl font-black text-white shadow-2xl"
             >
               <BellRing className="animate-bounce" />
-              Nouveau bon · {flash.table ? `Table ${flash.table.number}` : "À emporter"}
+              {t("kds.newTicket", { where: flash.table ? t("common.table", { number: flash.table.number }) : t("common.takeaway") })}
             </motion.div>
           </motion.div>
         )}

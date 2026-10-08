@@ -16,7 +16,7 @@ const ACTIONS = [
   "LOGIN_LOCKED",
 ] as const;
 
-const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date attendue au format AAAA-MM-JJ");
+const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "validation.dateFormat");
 
 const querySchema = z
   .object({

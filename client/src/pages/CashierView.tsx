@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, BadgePercent, ChefHat, Loader2, Printer, ReceiptText as ReceiptIcon, ShoppingBag } from "lucide-react";
+import { ArrowLeft, BadgePercent, ChefHat, Languages, Loader2, Printer, ReceiptText as ReceiptIcon, ShoppingBag } from "lucide-react";
 import { AppHeader } from "../components/AppHeader";
 import { toast } from "../components/Toasts";
+import { useTranslation } from "react-i18next";
+import { useLang } from "../lib/localize";
+import type { Lang } from "../types";
 import { FloorPlan, type CheckoutTarget, type FloorFilter } from "../components/cashier/FloorPlan";
 import { BillItems, PaymentHistory, type ItemSelection } from "../components/cashier/BillItems";
 import { PaymentPanel, type SplitMode } from "../components/cashier/PaymentPanel";
@@ -33,6 +36,11 @@ export function CashierView() {
   const [panelKey, setPanelKey] = useState(0);
   const [autoPrint, setAutoPrint] = useState(readAutoPrint);
   const [discountOpen, setDiscountOpen] = useState(false);
+  const { t } = useTranslation();
+  const screenLang = useLang();
+  // Bascule FR/EN des articles de l'addition (ex. bon pris en anglais, caissier francophone)
+  const [itemsLang, setItemsLang] = useState<Lang>(screenLang);
+  useEffect(() => setItemsLang(screenLang), [screenLang, target]);
   const lastClosed = useRef(false);
 
   const loadOverview = useCallback(() => {
@@ -107,7 +115,7 @@ export function CashierView() {
       setPanelKey((k) => k + 1);
       if (res.closed) {
         setSplit("FULL");
-        toast.success(res.tableReleased ? "Addition soldée — table libérée" : "Addition soldée");
+        toast.success(res.tableReleased ? t("cashier.settledReleased") : t("cashier.billSettled"));
       }
       loadOverview();
       await loadBill(target);
@@ -140,22 +148,24 @@ export function CashierView() {
 
   const title =
     bill?.target.kind === "table"
-      ? `Table ${bill.target.table.number}`
+      ? t("common.table", { number: bill.target.table.number })
       : bill?.target.kind === "order"
-        ? `Bon #${bill.target.order.number} · ${bill.target.order.type === "DELIVERY" ? "Livraison" : "À emporter"}`
+        ? `${t("common.ticket", { number: bill.target.order.number })} · ${bill.target.order.type === "DELIVERY" ? t("common.delivery") : t("common.takeaway")}`
         : null;
+  const hasEnglishOrders = bill?.orders.some((o) => o.language === "EN") ?? false;
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader title="Caisse">
+      <AppHeader title={t("nav.cashier")}>
         <button
           onClick={toggleAutoPrint}
-          className={`hidden items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium sm:flex ${
+          className={`hidden min-h-10 items-center gap-1.5 rounded-lg px-3 text-sm font-medium lg:flex ${
             autoPrint ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"
           }`}
-          title="Ouvrir l'impression du ticket automatiquement après chaque encaissement"
+          title={t("cashier.autoPrintHint")}
+          aria-pressed={autoPrint}
         >
-          <Printer size={15} /> Impression auto {autoPrint ? "activée" : "désactivée"}
+          <Printer size={15} /> {autoPrint ? t("cashier.autoPrintOn") : t("cashier.autoPrintOff")}
         </button>
       </AppHeader>
 
@@ -182,53 +192,67 @@ export function CashierView() {
               <section className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="border-b border-slate-200 bg-white px-4 py-3">
                   <div className="mb-3 flex items-center gap-2">
-                    <button onClick={() => setTarget(null)} className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100 lg:hidden" aria-label="Retour">
+                    <button onClick={() => setTarget(null)} className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100 lg:hidden" aria-label={t("common.back")}>
                       <ArrowLeft size={18} />
                     </button>
                     <h2 className="flex items-center gap-2 text-xl font-bold">
                       {bill.target.kind === "order" && <ShoppingBag size={20} />}
                       {title}
                     </h2>
-                    <span className="text-sm text-slate-500">
-                      · {bill.orders.length} bon{bill.orders.length > 1 ? "s" : ""}
-                    </span>
+                    <span className="text-sm text-slate-500">· {t("floor.openTickets", { count: bill.orders.length })}</span>
+                    {hasEnglishOrders && (
+                      <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-bold text-sky-700" title={t("kds.takenInEnglish")}>
+                        EN
+                      </span>
+                    )}
                     <div className="flex-1" />
+                    <button
+                      onClick={() => setItemsLang(itemsLang === "fr" ? "en" : "fr")}
+                      aria-pressed={itemsLang !== screenLang}
+                      className="flex min-h-11 items-center gap-1.5 rounded-xl bg-slate-100 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                      title={t("cashier.itemsLanguageHint")}
+                    >
+                      <Languages size={16} />
+                      <span className="hidden sm:inline">{t(itemsLang === "fr" ? "kds.viewInEn" : "kds.viewInFr")}</span>
+                      <span className="sm:hidden">{itemsLang === "fr" ? "EN" : "FR"}</span>
+                    </button>
                     {bill.totals.remaining > 0 && (
                       <button
                         onClick={() => setDiscountOpen(true)}
                         className="flex min-h-11 items-center gap-1.5 rounded-xl bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"
                       >
-                        <BadgePercent size={16} /> Remise
+                        <BadgePercent size={16} /> {t("cashier.discount")}
                       </button>
                     )}
                   </div>
                   <div className="grid grid-cols-3 gap-2">
-                    <Stat label="Total addition" value={bill.totals.total} />
+                    <Stat label={t("cashier.billTotal")} value={bill.totals.total} />
                     <Stat
-                      label={bill.totals.discounted ? `Payé · remise −${formatPrice(bill.totals.discounted)}` : "Déjà payé"}
+                      label={bill.totals.discounted ? t("cashier.paidWithDiscount", { discount: formatPrice(bill.totals.discounted) }) : t("cashier.alreadyPaid")}
                       value={bill.totals.paid}
                       tone="paid"
                     />
-                    <Stat label="Reste à payer" value={bill.totals.remaining} tone="due" />
+                    <Stat label={t("cashier.remaining")} value={bill.totals.remaining} tone="due" />
                   </div>
                   {bill.inKitchen > 0 && (
                     <p className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-800">
                       <ChefHat size={15} />
                       {bill.target.kind === "table"
-                        ? `${bill.inKitchen} bon${bill.inKitchen > 1 ? "s" : ""} encore en cuisine : la table sera libérée une fois servi${bill.inKitchen > 1 ? "s" : ""}.`
-                        : "Commande encore en préparation : elle reste affichée en cuisine jusqu'à sa remise au client."}
+                        ? t("cashier.inKitchenTable", { count: bill.inKitchen })
+                        : t("cashier.inKitchenTakeaway")}
                     </p>
                   )}
                 </div>
                 <div className="flex-1 space-y-3 overflow-y-auto bg-slate-50 p-4">
                   {bill.orders.length === 0 ? (
-                    <p className="py-16 text-center text-slate-400">Aucune commande ouverte sur cette table</p>
+                    <p className="py-16 text-center text-slate-400">{t("cashier.noOpenOrders")}</p>
                   ) : (
                     <BillItems
                       bill={bill}
                       selectable={split === "ITEMS"}
                       selection={selection}
                       onSelectionChange={setSelection}
+                      itemsLang={itemsLang}
                     />
                   )}
                   <PaymentHistory payments={bill.payments} discounts={bill.discounts} onReprint={(id) => setReceipt({ id, auto: false })} />
@@ -266,7 +290,7 @@ export function CashierView() {
             setPanelKey((k) => k + 1);
             loadOverview();
             if (closed) {
-              toast.success("Addition soldée");
+              toast.success(t("cashier.billSettled"));
               setTarget(null);
             } else void loadBill(target);
           }}
@@ -288,10 +312,11 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "pa
 }
 
 function EmptyState() {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 text-slate-400">
       <ReceiptIcon size={48} strokeWidth={1.5} />
-      <p>Sélectionnez une table ou un bon à emporter</p>
+      <p>{t("cashier.selectTarget")}</p>
     </div>
   );
 }
