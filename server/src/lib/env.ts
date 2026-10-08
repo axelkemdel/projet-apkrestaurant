@@ -15,6 +15,12 @@ const corsOrigin = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
+// GitHub Codespaces : l'interface est servie via https://<codespace>-5173.<domaine>, on l'autorise d'office
+const { CODESPACE_NAME, GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN } = process.env;
+if (CODESPACE_NAME && GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN) {
+  const port = process.env.CLIENT_PORT ?? "5173";
+  corsOrigin.push(`https://${CODESPACE_NAME}-${port}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`);
+}
 // Jamais de joker : les cookies de session ne doivent être acceptés que depuis nos propres écrans
 if (corsOrigin.some((o) => o === "*" || o.includes("*"))) {
   throw new Error("CORS_ORIGIN ne peut pas contenir de joker « * » : listez les origines autorisées");
