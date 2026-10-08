@@ -11,6 +11,7 @@ interface ServerToClient {
     action: "created" | "updated" | "deleted" | "availability" | "categories";
     item?: { id: string; name: string; isAvailable: boolean; isArchived: boolean };
   }) => void;
+  bill_updated: (event: { tableId: string | null; orderIds: string[]; remaining: number; closed: boolean }) => void;
   payment_recorded: (event: { paymentId: string; tableId: string | null; orderIds: string[]; amount: number; remaining: number; closed: boolean }) => void;
 }
 
@@ -24,30 +25,36 @@ interface ClientToServer {
 export type AppSocket = Socket<ServerToClient, ClientToServer>;
 
 let socket: AppSocket | null = null;
-let socketToken: string | null = null;
 
-/** Connexion unique par session, authentifiée par le jeton JWT. Même origine (proxy Vite en dev). */
+/**
+ * Connexion temps réel unique pour la page. Elle s'authentifie avec le cookie de
+ * session (envoyé par le navigateur au handshake) : la même instance est
+ * déconnectée / reconnectée à chaque changement de session, si bien que les
+ * écouteurs posés par les écrans restent valables.
+ */
 export function getSocket(): AppSocket {
-  const token = useAuth.getState().token;
-  if (socket && socketToken === token) return socket;
-  socket?.disconnect();
-  socketToken = token;
-  socket = io({ auth: { token }, transports: ["websocket", "polling"] });
+  if (socket) return socket;
+  socket = io({ autoConnect: false, withCredentials: true, transports: ["websocket", "polling"] });
   socket.on("connect_error", (err) => {
-    if (err.message === "Session expirée") useAuth.getState().logout();
+    if (err.message === "Session expirée") useAuth.getState().expire();
   });
   // Déconnexion forcée par le serveur (PIN réinitialisé, compte désactivé…) : on retente
-  // une connexion ; si la session a été révoquée, connect_error déclenche la déconnexion.
+  // une connexion ; si la session a été révoquée, connect_error ramène à l'écran de connexion.
   socket.on("disconnect", (reason) => {
-    if (reason === "io server disconnect") socket?.connect();
+    if (reason === "io server disconnect" && useAuth.getState().user && !useAuth.getState().locked) socket?.connect();
   });
   return socket;
 }
 
+/** (Re)connecte avec la session courante (après connexion / déverrouillage). */
+export function connectSocket() {
+  const s = getSocket();
+  s.disconnect();
+  s.connect();
+}
+
 export function disconnectSocket() {
   socket?.disconnect();
-  socket = null;
-  socketToken = null;
 }
 
 /** Émet un événement et attend l'accusé de réception du serveur. */

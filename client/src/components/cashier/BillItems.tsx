@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChefHat, Minus, Plus, Printer } from "lucide-react";
 import { formatPrice, formatTime, paymentModeLabel } from "../../lib/format";
 import { modifiersText } from "../OrderItemLine";
-import type { Bill, BillPayment, OrderStatus } from "../../types";
+import type { Bill, BillDiscount, BillPayment, OrderStatus } from "../../types";
 
 export type ItemSelection = Record<string, number>;
 
@@ -142,14 +142,37 @@ export function BillItems({
   );
 }
 
-export function PaymentHistory({ payments, onReprint }: { payments: BillPayment[]; onReprint: (id: string) => void }) {
-  if (payments.length === 0) return null;
+export function PaymentHistory({
+  payments,
+  discounts = [],
+  onReprint,
+}: {
+  payments: BillPayment[];
+  discounts?: BillDiscount[];
+  onReprint: (id: string) => void;
+}) {
+  if (payments.length === 0 && discounts.length === 0) return null;
   return (
     <section className="rounded-xl border border-slate-200 bg-white">
       <h3 className="border-b border-slate-100 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Versements déjà encaissés
+        Versements et remises
       </h3>
       <ul className="divide-y divide-slate-100 text-sm">
+        {discounts.map((d) => (
+          <li key={d.id} className="flex items-center gap-3 bg-amber-50/50 px-3 py-2">
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">
+                Remise {d.kind === "PERCENT" ? `${d.value} %` : ""}
+                <span className="font-normal text-slate-500"> · {d.reason}</span>
+              </div>
+              <div className="text-xs text-slate-500">
+                {formatTime(d.createdAt)} · {d.cashier.name}
+              </div>
+            </div>
+            <span className="font-semibold text-amber-700">−{formatPrice(d.amount)}</span>
+            <span className="w-9" />
+          </li>
+        ))}
         {payments.map((p) => (
           <li key={p.id} className="flex items-center gap-3 px-3 py-2">
             <div className="min-w-0 flex-1">
@@ -164,7 +187,7 @@ export function PaymentHistory({ payments, onReprint }: { payments: BillPayment[
             <span className="font-semibold text-emerald-700">{formatPrice(p.amount)}</span>
             <button
               onClick={() => onReprint(p.id)}
-              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+              className="flex h-11 w-11 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"
               aria-label={`Réimprimer le ticket ${p.number}`}
             >
               <Printer size={16} />

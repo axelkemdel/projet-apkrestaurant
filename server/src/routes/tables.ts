@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { requireAuth } from "../lib/auth.js";
+import { validateIdParams } from "../lib/security.js";
 import { listTables } from "../services/tables.js";
 import { listOpenOrdersForTable } from "../services/orders.js";
 
 export const tablesRouter = Router();
+validateIdParams(tablesRouter, "id");
 
 tablesRouter.get("/", requireAuth(), async (_req, res) => {
   const tables = await listTables();

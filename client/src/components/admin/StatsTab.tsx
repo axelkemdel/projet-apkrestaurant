@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { ArrowDownRight, ArrowUpRight, Banknote, CalendarDays, Hourglass, Loader2, Receipt, UtensilsCrossed } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Banknote, CalendarDays, Hourglass, Loader2, ReceiptText as Receipt, UtensilsCrossed } from "lucide-react";
 import { api } from "../../lib/api";
 import { getSocket } from "../../lib/socket";
 import { formatPrice, paymentModeLabel } from "../../lib/format";
@@ -94,13 +94,13 @@ export function StatsTab() {
             <button
               key={value}
               onClick={() => setDate(value)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${date === value ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`min-h-10 rounded-lg px-3 text-sm font-semibold ${date === value ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
             >
               {label}
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 rounded-xl bg-white px-3 py-1.5 text-sm shadow-sm">
+        <label className="flex min-h-12 items-center gap-2 rounded-xl bg-white px-3 text-sm shadow-sm">
           <CalendarDays size={16} className="text-slate-400" />
           <input
             type="date"
@@ -132,7 +132,9 @@ export function StatsTab() {
               ? `vs hier à la même heure (${formatPrice(daily.revenue.comparedTo)})`
               : `vs veille (${formatPrice(daily.revenue.comparedTo)})`
           }
-          footer={`${daily.revenue.payments} encaissement${daily.revenue.payments > 1 ? "s" : ""}`}
+          footer={`${daily.revenue.payments} encaissement${daily.revenue.payments > 1 ? "s" : ""}${
+            daily.discounts.count ? ` · ${formatPrice(daily.discounts.amount)} de remises (${daily.discounts.count})` : ""
+          }`}
         />
         <Kpi
           icon={UtensilsCrossed}
@@ -197,7 +199,7 @@ function Kpi({
       <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
         <Icon size={16} /> {label}
       </div>
-      <div className="mt-1 text-3xl font-black tabular-nums tracking-tight text-slate-900">{value}</div>
+      <div className="mt-1 text-2xl font-black tabular-nums tracking-tight text-slate-900 sm:text-3xl">{value}</div>
       {delta !== undefined && (
         <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
           {delta === null ? (
@@ -366,12 +368,12 @@ function TopItemsList({
 
 function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: [T, string][] }) {
   return (
-    <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+    <div className="flex flex-1 rounded-lg bg-slate-100 p-0.5 text-xs font-semibold sm:flex-none">
       {options.map(([v, label]) => (
         <button
           key={v}
           onClick={() => onChange(v)}
-          className={`rounded-md px-2.5 py-1 ${value === v ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
+          className={`min-h-10 flex-1 whitespace-nowrap rounded-md px-2.5 sm:min-h-8 ${value === v ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}
         >
           {label}
         </button>
@@ -412,7 +414,7 @@ function HourlyChart({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }} barCategoryGap={2}>
             <CartesianGrid vertical={false} stroke={GRID} />
-            <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fill: AXIS, fontSize: 11 }} interval="preserveStartEnd" />
+            <XAxis dataKey="label" tickLine={false} axisLine={{ stroke: GRID }} tick={{ fill: AXIS, fontSize: 11 }} interval="preserveStartEnd" minTickGap={8} />
             <YAxis
               tickLine={false}
               axisLine={false}

@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { deleteDishImage, isLocalDishImage, saveDishImage } from "../lib/uploads.js";
+import { audit, type Actor } from "../lib/audit.js";
 
 // ---------------------------------------------------------------------------
 // Validation (les champs arrivent en multipart/form-data, donc en texte)
@@ -58,8 +59,8 @@ const itemFields = {
   removeImage: boolField.optional(),
 };
 
-const createItemSchema = z.object(itemFields);
-const updateItemSchema = z.object(itemFields).partial();
+const createItemSchema = z.object(itemFields).strict();
+const updateItemSchema = z.object(itemFields).partial().strict();
 
 function cleanOptions(o: z.infer<typeof optionsSchema> | null | undefined) {
   if (!o) return Prisma.DbNull;
@@ -105,12 +106,13 @@ async function resolveImage(file: Express.Multer.File | undefined, imageUrl?: st
   return undefined;
 }
 
-export async function createMenuItem(raw: unknown, file?: Express.Multer.File) {
+export async function createMenuItem(raw: unknown, actor: Actor, file?: Express.Multer.File) {
   const input = createItemSchema.parse(raw);
   await assertCategory(input.categoryId);
   const image = await resolveImage(file, input.imageUrl, input.removeImage);
   try {
-    const item = await prisma.menuItem.create({
+    const item = await prisma.$transaction(async (tx) => {
+      const created = await tx.menuItem.create({
       data: {
         name: input.name,
         description: input.description || null,
@@ -122,6 +124,9 @@ export async function createMenuItem(raw: unknown, file?: Express.Multer.File) {
         imageUrl: image?.value ?? null,
       },
       include: adminItemInclude,
+      });
+      await audit(tx, actor, "MENU_ITEM_CREATED", { menuItemId: created.id, name: created.name, price: created.price });
+      return created;
     });
     return toAdminItem(item);
   } catch (e) {
@@ -130,7 +135,7 @@ export async function createMenuItem(raw: unknown, file?: Express.Multer.File) {
   }
 }
 
-export async function updateMenuItem(id: string, raw: unknown, file?: Express.Multer.File) {
+export async function updateMenuItem(id: string, raw: unknown, actor: Actor, file?: Express.Multer.File) {
   const input = updateItemSchema.parse(raw);
   const current = await prisma.menuItem.findUnique({ where: { id } });
   if (!current) throw new HttpError(404, "Plat introuvable");
@@ -138,7 +143,8 @@ export async function updateMenuItem(id: string, raw: unknown, file?: Express.Mu
 
   const image = await resolveImage(file, input.imageUrl, input.removeImage);
   try {
-    const item = await prisma.menuItem.update({
+    const item = await prisma.$transaction(async (tx) => {
+      const updated = await tx.menuItem.update({
       where: { id },
       data: {
         name: input.name,
@@ -151,6 +157,17 @@ export async function updateMenuItem(id: string, raw: unknown, file?: Express.Mu
         ...(image && { imageUrl: image.value }),
       },
       include: adminItemInclude,
+      });
+      // Anti-fraude : tout changement de prix est tracé (ancien → nouveau)
+      if (input.price !== undefined && input.price !== current.price) {
+        await audit(tx, actor, "MENU_PRICE_CHANGED", {
+          menuItemId: id,
+          name: updated.name,
+          oldPrice: current.price,
+          newPrice: input.price,
+        });
+      }
+      return updated;
     });
     // L'ancienne image téléversée n'est plus référencée : on libère le disque
     if (image && current.imageUrl !== image.value) await deleteDishImage(current.imageUrl);
@@ -162,7 +179,7 @@ export async function updateMenuItem(id: string, raw: unknown, file?: Express.Mu
 }
 
 export async function setAvailability(id: string, raw: unknown) {
-  const { isAvailable } = z.object({ isAvailable: z.boolean().optional() }).parse(raw ?? {});
+  const { isAvailable } = z.object({ isAvailable: z.boolean().optional() }).strict().parse(raw ?? {});
   const current = await prisma.menuItem.findUnique({ where: { id }, select: { isAvailable: true } });
   if (!current) throw new HttpError(404, "Plat introuvable");
   // Sans valeur explicite : bascule. Avec valeur : idempotent (deux gérants qui cliquent ne s'annulent pas).
@@ -174,13 +191,18 @@ export async function setAvailability(id: string, raw: unknown) {
   return toAdminItem(item);
 }
 
-export async function deleteMenuItem(id: string) {
+export async function deleteMenuItem(id: string, actor: Actor) {
   const item = await prisma.menuItem.findUnique({ where: { id }, include: adminItemInclude });
   if (!item) throw new HttpError(404, "Plat introuvable");
   if (item._count.orderItems > 0) {
     throw new HttpError(409, "Ce plat figure dans des commandes passées : masquez-le plutôt que de le supprimer");
   }
-  await prisma.menuItem.delete({ where: { id } });
+  await prisma.$transaction([
+    prisma.menuItem.delete({ where: { id } }),
+    prisma.auditLog.create({
+      data: { userId: actor.id, ipAddress: actor.ip, action: "MENU_ITEM_DELETED", details: { menuItemId: id, name: item.name, price: item.price } },
+    }),
+  ]);
   await deleteDishImage(item.imageUrl);
   return item;
 }
@@ -193,7 +215,7 @@ const categorySchema = z.object({
   name: z.string().trim().min(1).max(40),
   station: z.enum(["KITCHEN", "BAR"]),
   order: z.number().int().min(0).max(999).optional(),
-});
+}).strict();
 
 function uniqueNameError(e: unknown) {
   return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002"

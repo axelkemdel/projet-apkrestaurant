@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { ImageOff, Link2, Loader2, Plus, Upload, X } from "lucide-react";
+import { Crop, ImageOff, Link2, Loader2, Plus, Upload, X } from "lucide-react";
 import { Modal } from "../Modal";
+import { ImageCropper } from "./ImageCropper";
 import { Switch } from "./Switch";
 import { api } from "../../lib/api";
 import { formatPrice } from "../../lib/format";
@@ -35,6 +36,9 @@ export function MenuItemForm({
   const [extras, setExtras] = useState<Extra[]>([]);
   const [imageMode, setImageMode] = useState<"upload" | "url">("upload");
   const [file, setFile] = useState<File | null>(null);
+  /** Photo d'origine choisie, en cours de recadrage. */
+  const [original, setOriginal] = useState<File | null>(null);
+  const [cropping, setCropping] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const [removeImage, setRemoveImage] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -54,6 +58,8 @@ export function MenuItemForm({
     setImageMode(external ? "url" : "upload");
     setImageUrl(external ? item!.imageUrl! : "");
     setFile(null);
+    setOriginal(null);
+    setCropping(false);
     setRemoveImage(false);
     setError(null);
   }, [open, item, defaultCategoryId, categories]);
@@ -72,7 +78,8 @@ export function MenuItemForm({
     if (!ACCEPTED.includes(f.type)) return setError("Format accepté : JPEG, PNG ou WebP");
     if (f.size > MAX_IMAGE_BYTES) return setError("Image trop lourde (3 Mo maximum)");
     setError(null);
-    setFile(f);
+    setOriginal(f);
+    setCropping(true);
     setRemoveImage(false);
   }
 
@@ -116,14 +123,18 @@ export function MenuItemForm({
         <div className="flex items-center gap-3">
           {error && <p className="flex-1 text-sm font-medium text-red-600">{error}</p>}
           <div className="flex-1" />
-          <button type="button" onClick={onClose} className="rounded-xl bg-slate-100 px-4 py-2.5 font-semibold hover:bg-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="min-h-12 rounded-xl bg-slate-100 px-4 font-semibold hover:bg-slate-200"
+          >
             Annuler
           </button>
           <button
             type="submit"
             form="menu-item-form"
-            disabled={saving}
-            className="flex items-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
+            disabled={saving || cropping}
+            className="flex min-h-12 items-center gap-2 rounded-xl bg-brand-500 px-5 font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
           >
             {saving && <Loader2 size={16} className="animate-spin" />}
             Enregistrer
@@ -132,74 +143,112 @@ export function MenuItemForm({
       }
     >
       <form id="menu-item-form" onSubmit={submit} className="space-y-4">
-        {/* Image */}
-        <div className="flex gap-4">
-          <div className="flex h-28 w-36 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100">
-            {preview ? (
-              <img src={preview} alt="Aperçu" className="h-full w-full object-cover" onError={(e) => (e.currentTarget.style.opacity = "0.2")} />
-            ) : (
-              <ImageOff className="text-slate-300" />
-            )}
-          </div>
-          <div className="min-w-0 flex-1 space-y-2">
-            <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
-              {(
-                [
-                  ["upload", "Téléverser", Upload],
-                  ["url", "Lien URL", Link2],
-                ] as const
-              ).map(([mode, label, Icon]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => setImageMode(mode)}
-                  className={`flex flex-1 items-center justify-center gap-1 rounded-md py-1.5 ${imageMode === mode ? "bg-white shadow-sm" : "text-slate-500"}`}
-                >
-                  <Icon size={13} /> {label}
-                </button>
-              ))}
+        {/* Image : recadrage 4:3 après sélection d'un fichier */}
+        {cropping && original ? (
+          <ImageCropper
+            file={original}
+            onCancel={() => setCropping(false)}
+            onDone={(cropped) => {
+              setFile(cropped);
+              setCropping(false);
+            }}
+          />
+        ) : (
+          <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
+            <div className="flex aspect-[4/3] w-full shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 sm:h-28 sm:w-36">
+              {preview ? (
+                <img
+                  src={preview}
+                  alt="Aperçu"
+                  className="h-full w-full object-cover"
+                  onError={(e) => (e.currentTarget.style.opacity = "0.2")}
+                />
+              ) : (
+                <ImageOff className="text-slate-300" />
+              )}
             </div>
-            {imageMode === "upload" ? (
-              <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-3 py-3 text-sm text-slate-600 hover:border-brand-400">
-                <Upload size={16} />
-                <span className="truncate">{file ? file.name : "Choisir une photo (JPEG, PNG, WebP · 3 Mo)"}</span>
-                <input type="file" accept={ACCEPTED.join(",")} className="sr-only" onChange={(e) => pickFile(e.target.files?.[0])} />
-              </label>
-            ) : (
-              <input
-                value={imageUrl}
-                onChange={(e) => {
-                  setImageUrl(e.target.value);
-                  setRemoveImage(false);
-                }}
-                type="url"
-                placeholder="https://res.cloudinary.com/…/plat.jpg"
-                className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
-              />
-            )}
-            {(item?.imageUrl || file || imageUrl) && !removeImage && (
-              <button
-                type="button"
-                onClick={() => {
-                  setRemoveImage(true);
-                  setFile(null);
-                  setImageUrl("");
-                }}
-                className="text-xs font-medium text-red-600"
-              >
-                Retirer l'image
-              </button>
-            )}
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+                {(
+                  [
+                    ["upload", "Téléverser", Upload],
+                    ["url", "Lien URL", Link2],
+                  ] as const
+                ).map(([mode, label, Icon]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setImageMode(mode)}
+                    className={`flex min-h-10 flex-1 items-center justify-center gap-1 rounded-md ${imageMode === mode ? "bg-white shadow-sm" : "text-slate-500"}`}
+                  >
+                    <Icon size={13} /> {label}
+                  </button>
+                ))}
+              </div>
+              {imageMode === "upload" ? (
+                <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 px-3 text-sm text-slate-600 hover:border-brand-400">
+                  <Upload size={16} />
+                  <span className="truncate">{file ? "Photo recadrée prête" : "Choisir une photo (JPEG, PNG, WebP · 3 Mo)"}</span>
+                  <input
+                    type="file"
+                    accept={ACCEPTED.join(",")}
+                    className="sr-only"
+                    onChange={(e) => pickFile(e.target.files?.[0])}
+                  />
+                </label>
+              ) : (
+                <input
+                  value={imageUrl}
+                  onChange={(e) => {
+                    setImageUrl(e.target.value);
+                    setRemoveImage(false);
+                  }}
+                  type="url"
+                  placeholder="https://res.cloudinary.com/…/plat.jpg"
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-brand-500"
+                />
+              )}
+              <div className="flex flex-wrap gap-x-4">
+                {original && imageMode === "upload" && (
+                  <button
+                    type="button"
+                    onClick={() => setCropping(true)}
+                    className="flex min-h-10 items-center gap-1 text-xs font-medium text-slate-700"
+                  >
+                    <Crop size={14} /> Recadrer à nouveau
+                  </button>
+                )}
+                {(item?.imageUrl || file || imageUrl) && !removeImage && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRemoveImage(true);
+                      setFile(null);
+                      setImageUrl("");
+                    }}
+                    className="min-h-10 text-xs font-medium text-red-600"
+                  >
+                    Retirer l'image
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
 
         <Field label="Nom du plat">
           <input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
         </Field>
         <Field label="Description">
-          <textarea maxLength={300} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} className={inputCls} />
+          <textarea
+            maxLength={300}
+            rows={2}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className={inputCls}
+          />
         </Field>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Prix (FCFA)">
             <input
               required
@@ -227,7 +276,13 @@ export function MenuItemForm({
           <Switch checked={isAvailable} onChange={setIsAvailable} label="Disponible à la vente" />
         </label>
 
-        <TagInput label="Cuissons proposées" values={cooking} onChange={setCooking} presets={COOKING_PRESETS} placeholder="Ex : Saignant" />
+        <TagInput
+          label="Cuissons proposées"
+          values={cooking}
+          onChange={setCooking}
+          presets={COOKING_PRESETS}
+          placeholder="Ex : Saignant"
+        />
         <TagInput label="Accompagnements" values={sides} onChange={setSides} placeholder="Ex : Attiéké, Frites…" />
 
         <fieldset>
@@ -247,11 +302,18 @@ export function MenuItemForm({
                   min={0}
                   step={50}
                   value={x.price}
-                  onChange={(e) => setExtras(extras.map((y, j) => (j === i ? { ...y, price: Math.max(0, Number(e.target.value)) } : y)))}
-                  className={`${inputBase} w-28 shrink-0`}
+                  onChange={(e) =>
+                    setExtras(extras.map((y, j) => (j === i ? { ...y, price: Math.max(0, Number(e.target.value)) } : y)))
+                  }
+                  className={`${inputBase} w-24 shrink-0 sm:w-28`}
                   aria-label="Prix du supplément"
                 />
-                <button type="button" onClick={() => setExtras(extras.filter((_, j) => j !== i))} className="rounded-lg px-2 text-slate-400 hover:text-red-600" aria-label="Retirer">
+                <button
+                  type="button"
+                  onClick={() => setExtras(extras.filter((_, j) => j !== i))}
+                  className="flex w-11 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:text-red-600"
+                  aria-label="Retirer"
+                >
                   <X size={18} />
                 </button>
               </div>
@@ -259,7 +321,7 @@ export function MenuItemForm({
             <button
               type="button"
               onClick={() => setExtras([...extras, { name: "", price: 0 }])}
-              className="flex items-center gap-1 text-sm font-semibold text-brand-600"
+              className="flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-600"
             >
               <Plus size={15} /> Ajouter un supplément
             </button>
@@ -275,7 +337,7 @@ export function MenuItemForm({
   );
 }
 
-const inputBase = "rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-brand-500";
+const inputBase = "min-h-12 rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-brand-500";
 const inputCls = `w-full ${inputBase}`;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -338,7 +400,12 @@ function TagInput({
           {presets
             .filter((p) => !values.includes(p))
             .map((p) => (
-              <button key={p} type="button" onClick={() => add(p)} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200">
+              <button
+                key={p}
+                type="button"
+                onClick={() => add(p)}
+                className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200"
+              >
                 + {p}
               </button>
             ))}

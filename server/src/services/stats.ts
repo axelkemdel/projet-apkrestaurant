@@ -41,7 +41,7 @@ export async function getDailyStats(query: { date?: unknown }) {
 
   const isToday = date === todayLocal();
 
-  const [revenueByDay, byMode, hourlyRevenue, hourlyOrders, orderCounts, bills, overview, sameTime] = await Promise.all([
+  const [revenueByDay, byMode, hourlyRevenue, hourlyOrders, orderCounts, bills, overview, sameTime, discounts] = await Promise.all([
     // CA encaissé du jour et de la veille (comparaison)
     prisma.$queryRaw<{ day: Date; amount: bigint; count: bigint }[]>`
       SELECT (${local("createdAt")})::date AS day, SUM(amount)::bigint AS amount, COUNT(*)::bigint AS count
@@ -89,6 +89,11 @@ export async function getDailyStats(query: { date?: unknown }) {
           WHERE (${local("createdAt")})::date = ${date}::date - 1
             AND (${local("createdAt")})::time <= (now() AT TIME ZONE ${APP_TIMEZONE})::time`
       : Promise.resolve(null),
+    // Remises accordées ce jour (indicateur anti-fraude)
+    prisma.$queryRaw<{ amount: bigint; count: bigint }[]>`
+      SELECT COALESCE(SUM(amount), 0)::bigint AS amount, COUNT(*)::bigint AS count
+      FROM "Discount"
+      WHERE (${local("createdAt")})::date = ${date}::date`,
   ]);
 
   const revenueOf = (offset: number) => {
@@ -132,6 +137,7 @@ export async function getDailyStats(query: { date?: unknown }) {
       averageAmount: billCount ? Math.round(num(bills[0]?.amount) / billCount) : 0,
     },
     outstanding,
+    discounts: { amount: num(discounts[0]?.amount), count: num(discounts[0]?.count) },
     paymentsByMode: modes.map((mode) => {
       const row = byMode.find((r) => r.mode === mode);
       return { mode, amount: num(row?.amount), count: num(row?.count) };

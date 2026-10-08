@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/errors.js";
+import { audit, type Actor } from "../lib/audit.js";
+import { idSchema } from "../lib/security.js";
 
 // ---------------------------------------------------------------------------
 // Validation des entrées
@@ -10,21 +12,23 @@ import { HttpError } from "../lib/errors.js";
 export const createOrderSchema = z
   .object({
     type: z.enum(["DINE_IN", "TAKEAWAY", "DELIVERY"]).default("DINE_IN"),
-    tableId: z.string().min(1).optional(),
+    tableId: idSchema.optional(),
     customerNote: z.string().max(300).optional(),
     items: z
       .array(
         z.object({
-          menuItemId: z.string().min(1),
+          menuItemId: idSchema,
           quantity: z.number().int().min(1).max(50),
           notes: z.string().max(200).optional(),
           cooking: z.string().optional(),
           side: z.string().optional(),
-          extras: z.array(z.string()).max(10).default([]),
-        }),
+          extras: z.array(z.string().max(40)).max(10).default([]),
+        }).strict(),
       )
-      .min(1, "La commande est vide"),
+      .min(1, "La commande est vide")
+      .max(100),
   })
+  .strict()
   .refine((o) => o.type !== "DINE_IN" || o.tableId, {
     message: "Une table est requise pour une commande sur place",
     path: ["tableId"],
@@ -32,9 +36,9 @@ export const createOrderSchema = z
 
 export type CreateOrderInput = z.input<typeof createOrderSchema>;
 
-export const updateStatusSchema = z.object({
-  status: z.enum(["PREPARING", "READY", "SERVED", "CANCELLED"]),
-});
+export const updateStatusSchema = z
+  .object({ status: z.enum(["PREPARING", "READY", "SERVED", "CANCELLED"]) })
+  .strict();
 
 /** Options configurables d'un plat (champ JSON `MenuItem.options`). */
 export const menuOptionsSchema = z
@@ -179,28 +183,45 @@ const timestampField: Partial<Record<OrderStatus, "startedAt" | "readyAt" | "ser
   SERVED: "servedAt",
 };
 
-export async function updateOrderStatus(orderId: string, raw: unknown): Promise<OrderWithRelations> {
+export async function updateOrderStatus(orderId: string, raw: unknown, actor: Actor): Promise<OrderWithRelations> {
   const { status } = updateStatusSchema.parse(raw);
 
-  const current = await prisma.order.findUnique({ where: { id: orderId } });
-  if (!current) throw new HttpError(404, "Commande introuvable");
-  if (!transitions[current.status].includes(status)) {
-    throw new HttpError(409, `Transition impossible : ${current.status} → ${status}`);
-  }
+  return prisma.$transaction(async (tx) => {
+    const current = await tx.order.findUnique({ where: { id: orderId }, include: { items: true, table: true } });
+    if (!current) throw new HttpError(404, "Commande introuvable");
+    if (!transitions[current.status].includes(status)) {
+      throw new HttpError(409, `Transition impossible : ${current.status} → ${status}`);
+    }
 
-  if (status === "CANCELLED" && (await prisma.payment.count({ where: { orders: { some: { id: orderId } } } }))) {
-    throw new HttpError(409, "Un versement a déjà été encaissé sur ce bon : annulation impossible");
-  }
+    if (status === "CANCELLED") {
+      const settled = await tx.order.count({
+        where: { id: orderId, OR: [{ payments: { some: {} } }, { discounts: { some: {} } }] },
+      });
+      if (settled) throw new HttpError(409, "Un versement ou une remise porte déjà sur ce bon : annulation impossible");
+    }
 
-  const field = timestampField[status];
-  // Addition déjà réglée en caisse : une fois servi, le bon est directement soldé.
-  const finalStatus = status === "SERVED" && current.paidAt ? "PAID" : status;
-  // Mise à jour conditionnelle : si deux écrans cliquent en même temps, un seul gagne.
-  const { count } = await prisma.order.updateMany({
-    where: { id: orderId, status: current.status },
-    data: { status: finalStatus, ...(field && { [field]: new Date() }) },
+    const field = timestampField[status];
+    // Addition déjà réglée en caisse : une fois servi, le bon est directement soldé.
+    const finalStatus = status === "SERVED" && current.paidAt ? "PAID" : status;
+    // Mise à jour conditionnelle : si deux écrans cliquent en même temps, un seul gagne.
+    const { count } = await tx.order.updateMany({
+      where: { id: orderId, status: current.status },
+      data: { status: finalStatus, ...(field && { [field]: new Date() }) },
+    });
+    if (count === 0) throw new HttpError(409, "La commande a été modifiée entre-temps");
+
+    // Anti-fraude : une annulation (plats non facturés) est toujours tracée, dans la même transaction
+    if (status === "CANCELLED") {
+      await audit(tx, actor, "ORDER_CANCELLED", {
+        orderId,
+        orderNumber: current.number,
+        table: current.table?.number ?? null,
+        previousStatus: current.status,
+        amount: current.totalAmount,
+        items: current.items.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice })),
+      });
+    }
+
+    return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude });
   });
-  if (count === 0) throw new HttpError(409, "La commande a été modifiée entre-temps");
-
-  return prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude });
 }

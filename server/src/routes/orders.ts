@@ -1,9 +1,11 @@
 import { Router } from "express";
-import { requireAuth } from "../lib/auth.js";
+import { actorOf, requireAuth } from "../lib/auth.js";
+import { validateIdParams } from "../lib/security.js";
 import { createOrder, listActiveOrders, updateOrderStatus } from "../services/orders.js";
 import { broadcastNewOrder, broadcastOrderUpdated } from "../realtime.js";
 
 export const ordersRouter = Router();
+validateIdParams(ordersRouter, "id");
 
 /** Bons en cours (PENDING / PREPARING / READY) — chargement initial du KDS. */
 ordersRouter.get("/active", requireAuth(), async (_req, res) => {
@@ -22,7 +24,7 @@ ordersRouter.patch("/:id/status", requireAuth("CUISINE", "SERVEUR"), async (req,
     res.status(403).json({ error: "Un serveur ne peut que marquer une commande comme servie" });
     return;
   }
-  const order = await updateOrderStatus(String(req.params.id), req.body);
+  const order = await updateOrderStatus(String(req.params.id), req.body, actorOf(req));
   await broadcastOrderUpdated(order);
   res.json(order);
 });

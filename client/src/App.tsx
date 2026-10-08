@@ -1,4 +1,8 @@
+import { useEffect } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { Loader2 } from "lucide-react";
+import { restoreSession } from "./lib/session";
+import { IdleLock } from "./components/IdleLock";
 import { useAuth } from "./store/auth";
 import { Login } from "./pages/Login";
 import { ServerView } from "./pages/ServerView";
@@ -25,6 +29,21 @@ function Guard({ roles, children }: { roles: Role[]; children: React.ReactNode }
 
 export function App() {
   const user = useAuth((s) => s.user);
+  const status = useAuth((s) => s.status);
+
+  // Au chargement : la session éventuelle est portée par le cookie HttpOnly, on la vérifie auprès du serveur
+  useEffect(() => {
+    void restoreSession();
+  }, []);
+
+  if (status === "checking") {
+    return (
+      <div className="flex h-full items-center justify-center bg-slate-950">
+        <Loader2 className="animate-spin text-slate-500" />
+      </div>
+    );
+  }
+
   return (
     <>
       <Routes>
@@ -63,6 +82,7 @@ export function App() {
         />
         <Route path="*" element={<Navigate to={user ? homeByRole[user.role] : "/login"} replace />} />
       </Routes>
+      <IdleLock />
       <Toaster />
     </>
   );

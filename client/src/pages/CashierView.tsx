@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChefHat, Loader2, Printer, ReceiptText as ReceiptIcon, ShoppingBag } from "lucide-react";
+import { ArrowLeft, BadgePercent, ChefHat, Loader2, Printer, ReceiptText as ReceiptIcon, ShoppingBag } from "lucide-react";
 import { AppHeader } from "../components/AppHeader";
 import { toast } from "../components/Toasts";
 import { FloorPlan, type CheckoutTarget, type FloorFilter } from "../components/cashier/FloorPlan";
 import { BillItems, PaymentHistory, type ItemSelection } from "../components/cashier/BillItems";
 import { PaymentPanel, type SplitMode } from "../components/cashier/PaymentPanel";
 import { ReceiptModal } from "../components/cashier/ReceiptModal";
+import { DiscountModal } from "../components/cashier/DiscountModal";
 import { api } from "../lib/api";
 import { getSocket } from "../lib/socket";
 import { formatPrice } from "../lib/format";
@@ -31,6 +32,7 @@ export function CashierView() {
   const [receipt, setReceipt] = useState<{ id: string; auto: boolean } | null>(null);
   const [panelKey, setPanelKey] = useState(0);
   const [autoPrint, setAutoPrint] = useState(readAutoPrint);
+  const [discountOpen, setDiscountOpen] = useState(false);
   const lastClosed = useRef(false);
 
   const loadOverview = useCallback(() => {
@@ -83,7 +85,7 @@ export function CashierView() {
       }, 150);
     };
     const socket = getSocket();
-    const events = ["new_order", "order_updated", "table_updated", "payment_recorded", "connect"] as const;
+    const events = ["new_order", "order_updated", "table_updated", "payment_recorded", "bill_updated", "connect"] as const;
     events.forEach((e) => socket.on(e, refresh));
     return () => {
       clearTimeout(timer);
@@ -180,7 +182,7 @@ export function CashierView() {
               <section className="flex min-h-0 min-w-0 flex-1 flex-col">
                 <div className="border-b border-slate-200 bg-white px-4 py-3">
                   <div className="mb-3 flex items-center gap-2">
-                    <button onClick={() => setTarget(null)} className="rounded-lg p-1.5 hover:bg-slate-100 lg:hidden" aria-label="Retour">
+                    <button onClick={() => setTarget(null)} className="flex h-11 w-11 items-center justify-center rounded-lg hover:bg-slate-100 lg:hidden" aria-label="Retour">
                       <ArrowLeft size={18} />
                     </button>
                     <h2 className="flex items-center gap-2 text-xl font-bold">
@@ -190,10 +192,23 @@ export function CashierView() {
                     <span className="text-sm text-slate-500">
                       · {bill.orders.length} bon{bill.orders.length > 1 ? "s" : ""}
                     </span>
+                    <div className="flex-1" />
+                    {bill.totals.remaining > 0 && (
+                      <button
+                        onClick={() => setDiscountOpen(true)}
+                        className="flex min-h-11 items-center gap-1.5 rounded-xl bg-amber-50 px-3 text-sm font-semibold text-amber-800 hover:bg-amber-100"
+                      >
+                        <BadgePercent size={16} /> Remise
+                      </button>
+                    )}
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <Stat label="Total addition" value={bill.totals.total} />
-                    <Stat label="Déjà payé" value={bill.totals.paid} tone="paid" />
+                    <Stat
+                      label={bill.totals.discounted ? `Payé · remise −${formatPrice(bill.totals.discounted)}` : "Déjà payé"}
+                      value={bill.totals.paid}
+                      tone="paid"
+                    />
                     <Stat label="Reste à payer" value={bill.totals.remaining} tone="due" />
                   </div>
                   {bill.inKitchen > 0 && (
@@ -216,7 +231,7 @@ export function CashierView() {
                       onSelectionChange={setSelection}
                     />
                   )}
-                  <PaymentHistory payments={bill.payments} onReprint={(id) => setReceipt({ id, auto: false })} />
+                  <PaymentHistory payments={bill.payments} discounts={bill.discounts} onReprint={(id) => setReceipt({ id, auto: false })} />
                 </div>
               </section>
 
@@ -241,6 +256,22 @@ export function CashierView() {
         </main>
       </div>
 
+      {bill && (
+        <DiscountModal
+          bill={bill}
+          open={discountOpen}
+          onClose={() => setDiscountOpen(false)}
+          onApplied={(closed) => {
+            setDiscountOpen(false);
+            setPanelKey((k) => k + 1);
+            loadOverview();
+            if (closed) {
+              toast.success("Addition soldée");
+              setTarget(null);
+            } else void loadBill(target);
+          }}
+        />
+      )}
       <ReceiptModal paymentId={receipt?.id ?? null} autoPrint={receipt?.auto} onClose={closeReceipt} />
     </div>
   );

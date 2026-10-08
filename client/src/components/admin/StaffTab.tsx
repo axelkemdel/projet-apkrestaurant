@@ -51,21 +51,73 @@ export function StaffTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="flex flex-1 items-center gap-2 text-sm text-slate-500">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <p className="flex flex-1 items-start gap-2 text-sm text-slate-500">
           <ShieldCheck size={16} className="shrink-0 text-emerald-600" />
           Les codes PIN sont chiffrés : ils ne sont affichés qu'une fois, à la création ou à la réinitialisation.
         </p>
         <button
           onClick={() => setEditing(null)}
-          className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-600"
+          className="flex min-h-12 items-center justify-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white shadow-sm hover:bg-brand-600"
         >
           <Plus size={16} /> Nouvel employé
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl bg-white shadow-sm">
-        <table className="w-full min-w-[640px] text-sm">
+      {/* Smartphone / tablette portrait : cartes tactiles */}
+      <ul className="grid gap-3 sm:grid-cols-2 md:hidden">
+        {users.map((u) => (
+          <motion.li layout key={u.id} className={`rounded-2xl bg-white p-4 shadow-sm ${u.isActive ? "" : "opacity-60"}`}>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-semibold">
+                  {u.name}
+                  {u.id === me?.id && <span className="ml-1.5 text-xs font-normal text-slate-400">(vous)</span>}
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                  <span className={`rounded-full px-2.5 py-1 font-semibold ${roleStyle[u.role]}`}>{roleLabel[u.role]}</span>
+                  <span className={`flex items-center gap-1 ${u.isActive ? "text-emerald-700" : "text-slate-500"}`}>
+                    <span className={`h-2 w-2 rounded-full ${u.isActive ? "bg-emerald-500" : "bg-slate-300"}`} />
+                    {u.isActive ? "Actif" : "Désactivé"}
+                  </span>
+                </div>
+              </div>
+              <span className="font-mono tracking-[0.3em] text-slate-300" aria-label="Code PIN masqué">
+                ••••
+              </span>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              <button onClick={() => setEditing(u)} className="flex min-h-12 items-center justify-center gap-1.5 rounded-xl bg-slate-100 text-sm font-semibold">
+                <Pencil size={16} /> Modifier
+              </button>
+              <button
+                onClick={() => setResetting(u)}
+                disabled={!u.isActive}
+                className="flex min-h-12 items-center justify-center gap-1.5 rounded-xl bg-slate-100 text-sm font-semibold disabled:opacity-40"
+              >
+                <KeyRound size={16} /> PIN
+              </button>
+              {u.id !== me?.id ? (
+                <button
+                  onClick={() => void setActive(u, !u.isActive)}
+                  className={`flex min-h-12 items-center justify-center gap-1.5 rounded-xl text-sm font-semibold ${
+                    u.isActive ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"
+                  }`}
+                >
+                  {u.isActive ? <UserX size={16} /> : <UserCheck size={16} />}
+                  {u.isActive ? "Désactiver" : "Réactiver"}
+                </button>
+              ) : (
+                <span />
+              )}
+            </div>
+          </motion.li>
+        ))}
+      </ul>
+
+      {/* Tablette paysage et plus : tableau */}
+      <div className="hidden overflow-x-auto rounded-2xl bg-white shadow-sm md:block">
+        <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
               <th className="px-4 py-3 font-semibold">Nom</th>
@@ -96,23 +148,23 @@ export function StaffTab() {
                   <button
                     onClick={() => setResetting(u)}
                     disabled={!u.isActive}
-                    className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-40"
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-40"
                   >
                     <KeyRound size={13} /> Réinitialiser
                   </button>
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
-                    <button onClick={() => setEditing(u)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label={`Modifier ${u.name}`} title="Modifier">
+                    <button onClick={() => setEditing(u)} className="flex h-12 w-12 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label={`Modifier ${u.name}`} title="Modifier">
                       <Pencil size={16} />
                     </button>
                     {u.id !== me?.id &&
                       (u.isActive ? (
-                        <button onClick={() => void setActive(u, false)} className="rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Désactiver ${u.name}`} title="Désactiver">
+                        <button onClick={() => void setActive(u, false)} className="flex h-12 w-12 items-center justify-center rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Désactiver ${u.name}`} title="Désactiver">
                           <UserX size={16} />
                         </button>
                       ) : (
-                        <button onClick={() => void setActive(u, true)} className="rounded-lg p-2 text-slate-500 hover:bg-emerald-50 hover:text-emerald-700" aria-label={`Réactiver ${u.name}`} title="Réactiver">
+                        <button onClick={() => void setActive(u, true)} className="flex h-12 w-12 items-center justify-center rounded-lg text-slate-500 hover:bg-emerald-50 hover:text-emerald-700" aria-label={`Réactiver ${u.name}`} title="Réactiver">
                           <UserCheck size={16} />
                         </button>
                       ))}

@@ -5,13 +5,14 @@ Application de gestion des commandes : prise de commande par les serveurs (table
 > **Étape 1** : schéma de BDD, API Express + Socket.io (`new_order`), Vue Serveur et Vue Cuisine.
 > **Module 2** : Caisse — additions par table, addition partagée (parts égales / par articles / acompte), Espèces avec rendu de monnaie, Carte, Orange Money, Telecel Cash, ticket thermique 80 mm.
 > **Module 3** : Tableau de bord gérant — KPI et graphiques en temps réel, gestion de la carte (ruptures diffusées en direct, images), personnel et codes PIN.
+> **Module 4** : Sécurité & responsive — session en cookie HttpOnly, verrouillage après inactivité, helmet / CORS / anti-CSRF / limitation de débit, validation Zod stricte, remises plafonnées, journal d'audit anti-fraude en ajout seul, recadrage d'images, interface mobile-first (barre d'onglets, tiroirs, cibles de 48 px).
 
 ## Stack
 
 | Couche | Choix |
 | --- | --- |
 | Frontend | React 19 + TypeScript, Vite, Tailwind CSS v4, Zustand, Lucide, Framer Motion, Recharts |
-| Backend | Node.js, Express 5, Socket.io, Zod (validation), JWT (session par PIN), Multer (images) |
+| Backend | Node.js, Express 5, Socket.io, Zod (validation stricte), JWT en cookie HttpOnly, Helmet, express-rate-limit, Multer (images) |
 | Base de données | PostgreSQL + Prisma |
 
 ## Arborescence
@@ -68,7 +69,7 @@ Astuce démo : ouvrez la Vue Cuisine dans une fenêtre et la Vue Serveur dans un
 
 ## Temps réel (Socket.io)
 
-Chaque appareil se connecte avec son jeton JWT (`auth: { token }`) et rejoint la salle de son rôle (`kitchen`, `floor`, `cashier`, `admin`).
+Chaque appareil s'authentifie au handshake avec son cookie de session HttpOnly (origine vérifiée, compte actif, version de session) puis rejoint la salle de son rôle (`kitchen`, `floor`, `cashier`, `admin`). Les charges utiles des événements sont validées par Zod.
 
 | Sens | Événement | Contenu |
 | --- | --- | --- |
@@ -92,7 +93,9 @@ Règles métier côté serveur :
 | Méthode | Route | Rôles |
 | --- | --- | --- |
 | GET | `/api/auth/users` | public (tuiles de connexion) |
-| POST | `/api/auth/login` | public — `{ userId, pin }` → `{ token, user }` |
+| POST | `/api/auth/login` | public — `{ userId, pin }` → `{ user }` + cookie de session HttpOnly ; 5 essais / 5 min par profil |
+| GET | `/api/auth/me` | session en cours (`{ user: null }` si aucune) |
+| POST | `/api/auth/logout` | efface le cookie de session |
 | GET | `/api/menu` | connecté |
 | GET | `/api/tables` | connecté |
 | GET | `/api/tables/:id/orders` | connecté — bons ouverts de la table |
@@ -103,6 +106,7 @@ Règles métier côté serveur :
 | GET | `/api/checkout/table/:tableId` | CAISSE — bons ouverts, articles (quantités réglées), versements, totaux |
 | GET | `/api/checkout/order/:orderId` | CAISSE — addition d'un bon à emporter / livraison |
 | POST | `/api/checkout/pay` | CAISSE — enregistre un versement (voir ci-dessous) |
+| POST | `/api/checkout/discount` | CAISSE — remise `{ tableId\|orderId, kind: PERCENT\|AMOUNT, value, reason }` (plafonnée, auditée) |
 | GET | `/api/checkout/receipt/:paymentId` | CAISSE — données structurées du ticket |
 | GET | `/api/admin/stats/daily?date=AAAA-MM-JJ` | ADMIN — CA (+ variation), commandes, panier moyen, encours, modes de paiement, activité par heure |
 | GET | `/api/admin/stats/top-items?period=day\|week\|month` | ADMIN — classement par volume et par valeur |
@@ -114,6 +118,7 @@ Règles métier côté serveur :
 | GET / POST | `/api/admin/users` | ADMIN — personnel ; la création renvoie le PIN une seule fois |
 | PUT | `/api/admin/users/:id` | ADMIN — nom, rôle, activation |
 | PUT | `/api/admin/users/:id/pin` | ADMIN — réinitialise le PIN (saisi ou généré), renvoyé une seule fois |
+| GET | `/api/admin/audit-logs?action=&userId=&from=&to=&cursor=` | ADMIN — journal d'audit (lecture seule, paginé) |
 
 ## Modèle de données
 
@@ -170,3 +175,40 @@ Règles :
 - Réinitialiser le PIN, changer le rôle ou désactiver un employé **ferme immédiatement ses sessions** (jeton invalidé via `User.sessionVersion`, connexions temps réel coupées).
 - Anti force brute : 5 codes erronés sur un profil le verrouillent 5 minutes (levé par une réinitialisation du PIN).
 - Un gérant ne peut pas retirer son propre accès, et il reste toujours au moins un gérant actif.
+
+## Sécurité & anti-fraude (Module 4)
+
+**Session**
+- Codes PIN hachés (bcrypt), jamais stockés ni journalisés en clair.
+- Jeton JWT (HS256) dans un cookie `HttpOnly`, `SameSite=Strict`, `Secure` : illisible par le JavaScript (protégé d'un XSS), jamais envoyé depuis un autre site. Aucun jeton en `localStorage`.
+- Durée : 14 h maximum ; expiration côté serveur après `SESSION_IDLE_MINUTES` (30) sans requête, jeton glissant ré-émis au plus une fois par minute. Les écrans cuisine (affichage permanent) n'ont que la limite de 14 h.
+- Verrouillage de l'écran après inactivité (gérant / caisse : 5 min, serveur : 10 min, cuisine : jamais), avec avertissement 30 s avant. Le verrouillage ferme la session serveur ; reprise avec le PIN, ou changement d'utilisateur. Bouton cadenas pour verrouiller manuellement.
+- Révocation immédiate (réinitialisation de PIN, changement de rôle, désactivation) via `User.sessionVersion` + coupure des sockets.
+
+**Protection de l'API**
+- `helmet()` (CSP `default-src 'none'`, `nosniff`, `frame-ancestors 'none'`, HSTS…), `x-powered-by` retiré.
+- CORS limité à `CORS_ORIGIN` ; le serveur refuse de démarrer si la liste contient `*`.
+- Anti-CSRF en profondeur : toute requête modifiante d'un navigateur doit venir d'une origine autorisée (en plus de `SameSite=Strict`). Même contrôle au handshake Socket.io (anti « cross-site WebSocket hijacking »).
+- Validation Zod `.strict()` (champ inconnu = refus) des corps, paramètres d'URL (`router.param`), requêtes et événements Socket.io.
+- `express-rate-limit` : PIN 5 essais / 5 min par profil (verrouillage tracé dans l'audit, levé par une réinitialisation du PIN) et 30 échecs / 5 min par appareil ; 600 requêtes / min par IP sur l'API.
+
+**Téléversement**
+- Type MIME filtré dès la réception (`image/jpeg`, `image/png`, `image/webp`), puis signature binaire vérifiée et comparée au type annoncé (SVG et fichiers déguisés refusés), 3 Mo maximum.
+- Nom de fichier aléatoire (UUID) : le nom d'origine n'est jamais utilisé (aucune traversée de répertoire possible). Servi avec `nosniff`.
+- Côté gérant, la photo est recadrée en 4:3 et réencodée (WebP 800×600) dans le navigateur, ce qui supprime aussi les métadonnées EXIF (GPS…).
+
+**Remises** — motif obligatoire ; un caissier ne peut pas dépasser `MAX_CASHIER_DISCOUNT_PCT` (15 %) cumulés sur une addition, au-delà seul un gérant peut l'accorder ; une remise ne peut dépasser le solde. Une remise n'est pas un encaissement : le chiffre d'affaires reste la somme des paiements ; le total des remises du jour apparaît dans le tableau de bord. Un bon ayant reçu un versement ou une remise ne peut plus être annulé.
+
+**Journal d'audit (`AuditLog`)** — `userId`, `action`, `details` (JSON), `timestamp`, `ipAddress`. Écrit **dans la même transaction** que l'action (pas d'action sans trace) pour : annulation de commande, remise, changement de prix, création / suppression de plat, création d'employé, changement de rôle, (dés)activation, réinitialisation de PIN, profil verrouillé par force brute. Le journal est **en ajout seul** : un trigger PostgreSQL refuse tout `UPDATE` / `DELETE`, même pour un gérant ; aucune route de modification n'existe. Consultation filtrable dans l'onglet « Journal d'audit ».
+
+**Vérification** — `npm run test:security -w server` (API démarrée, base de démo fraîche) rejoue 37 contrôles de bout en bout sur ces protocoles.
+
+**Déploiement** — le cookie `Secure` exige HTTPS : en production, servir l'application derrière un proxy TLS (Caddy, Nginx…). `localhost` est accepté en développement ; pour tester depuis une tablette en `http://IP-locale`, mettre `COOKIE_SECURE=false` (avertissement au démarrage) et ajouter l'origine à `CORS_ORIGIN`. Remplacer `JWT_SECRET` par une valeur aléatoire (refusé en production si trop courte).
+
+## Interface responsive
+
+| Écran | Disposition du tableau de bord |
+| --- | --- |
+| Smartphone (< 640 px) | barre d'onglets inférieure (Stats, Menu, Équipe, Audit, Écrans), une colonne, cartes tactiles au lieu des tableaux, formulaires en tiroir glissable (fermeture par glissement vers le bas) |
+| Tablette / caisse tactile (640–1024 px) | barre latérale rétractable (icônes ↔ libellés), grilles de 2 colonnes, cibles tactiles ≥ 48 px |
+| Grand écran (> 1024 px) | barre latérale dépliée, contenu centré `max-w-7xl`, KPI sur 4 colonnes à partir de 1280 px |

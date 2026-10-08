@@ -124,11 +124,11 @@ export function MenuTab() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="flex min-w-56 flex-1 items-center gap-2 rounded-xl bg-white px-3 py-2 shadow-sm">
+        <label className="flex min-h-12 w-full items-center gap-2 rounded-xl bg-white px-3 shadow-sm lg:w-auto lg:min-w-56 lg:flex-1">
           <Search size={16} className="text-slate-400" />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Rechercher un plat…" className="flex-1 bg-transparent outline-none" />
         </label>
-        <div className="flex rounded-xl bg-white p-1 shadow-sm">
+        <div className="flex flex-1 rounded-xl bg-white p-1 shadow-sm sm:flex-none">
           {(
             [
               ["ALL", "Tous"],
@@ -139,13 +139,13 @@ export function MenuTab() {
             <button
               key={v}
               onClick={() => setFilter(v)}
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${filter === v ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`min-h-10 flex-1 rounded-lg px-3 text-sm font-semibold whitespace-nowrap sm:flex-none ${filter === v ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
             >
               {label} <span className="opacity-60">{counts[v]}</span>
             </button>
           ))}
         </div>
-        <button onClick={() => setCategoryForm(null)} className="rounded-xl bg-white px-3 py-2 text-sm font-semibold shadow-sm hover:bg-slate-50">
+        <button onClick={() => setCategoryForm(null)} className="min-h-12 flex-1 rounded-xl bg-white px-3 text-sm font-semibold shadow-sm hover:bg-slate-50 sm:flex-none">
           Nouvelle catégorie
         </button>
         <button
@@ -153,7 +153,7 @@ export function MenuTab() {
             setNewInCategory(undefined);
             setEditing(null);
           }}
-          className="flex items-center gap-1.5 rounded-xl bg-brand-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-600"
+          className="flex min-h-12 flex-1 items-center justify-center gap-1.5 rounded-xl bg-brand-500 px-4 text-sm font-semibold text-white shadow-sm hover:bg-brand-600 sm:flex-none"
         >
           <Plus size={16} /> Nouveau plat
         </button>
@@ -161,16 +161,16 @@ export function MenuTab() {
 
       {visible.map((cat) => (
         <section key={cat.id} className="overflow-hidden rounded-2xl bg-white shadow-sm">
-          <header className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
+          <header className="flex items-center gap-2 border-b border-slate-100 py-1 pl-4 pr-2 sm:gap-3">
             <h3 className="font-semibold">{cat.name}</h3>
             <StationBadge station={cat.station} />
-            <span className="text-sm text-slate-400">{cat.items.length} article{cat.items.length > 1 ? "s" : ""}</span>
+            <span className="hidden text-sm text-slate-400 sm:inline">{cat.items.length} article{cat.items.length > 1 ? "s" : ""}</span>
             <div className="flex-1" />
-            <button onClick={() => setCategoryForm(cat)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100" aria-label={`Modifier la catégorie ${cat.name}`}>
+            <button onClick={() => setCategoryForm(cat)} className="flex h-12 w-12 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label={`Modifier la catégorie ${cat.name}`}>
               <Pencil size={15} />
             </button>
             {categories.find((c) => c.id === cat.id)?.items.length === 0 && (
-              <button onClick={() => removeCategory(cat)} className="rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Supprimer la catégorie ${cat.name}`}>
+              <button onClick={() => removeCategory(cat)} className="flex h-12 w-12 items-center justify-center rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label={`Supprimer la catégorie ${cat.name}`}>
                 <Trash2 size={15} />
               </button>
             )}
@@ -179,7 +179,7 @@ export function MenuTab() {
                 setNewInCategory(cat.id);
                 setEditing(null);
               }}
-              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-semibold text-brand-600 hover:bg-brand-50"
+              className="flex min-h-12 items-center gap-1 rounded-lg px-3 text-sm font-semibold text-brand-600 hover:bg-brand-50"
             >
               <Plus size={15} /> Ajouter
             </button>
@@ -193,44 +193,48 @@ export function MenuTab() {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0, height: 0 }}
-                  className={`flex items-center gap-3 px-4 py-3 ${item.isArchived ? "bg-slate-50" : ""}`}
+                  className={`flex flex-wrap items-center gap-x-3 px-3 py-2 sm:flex-nowrap sm:px-4 ${item.isArchived ? "bg-slate-50" : ""}`}
                 >
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-100 ${item.isArchived ? "opacity-40" : ""}`}>
+                  <div className={`flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-slate-100 ${item.isArchived ? "opacity-40" : ""}`}>
                     {item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" /> : <ImageOff size={18} className="text-slate-300" />}
                   </div>
                   <div className={`min-w-0 flex-1 ${item.isArchived ? "opacity-50" : ""}`}>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="font-medium">{item.name}</span>
                       {!item.isAvailable && <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">Épuisé</span>}
                       {item.isArchived && <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold uppercase text-slate-600">Masqué</span>}
                     </div>
                     <div className="truncate text-xs text-slate-500">{optionsSummary(item) || item.description || "—"}</div>
+                    <div className="font-semibold tabular-nums sm:hidden">{formatPrice(item.price)}</div>
                   </div>
-                  <span className="w-24 text-right font-semibold tabular-nums">{formatPrice(item.price)}</span>
-                  <div className="flex w-28 items-center justify-end gap-2">
-                    <span className={`hidden text-xs sm:inline ${item.isAvailable ? "text-emerald-700" : "text-slate-500"}`}>{item.isAvailable ? "En vente" : "Rupture"}</span>
-                    <Switch
-                      checked={item.isAvailable}
-                      disabled={pending.has(item.id) || item.isArchived}
-                      onChange={(v) => void toggleAvailability(item, v)}
-                      label={`${item.name} disponible`}
-                    />
-                  </div>
-                  <div className="flex items-center">
-                    <IconButton label="Modifier" onClick={() => setEditing(item)}>
-                      <Pencil size={16} />
-                    </IconButton>
-                    <IconButton label={item.isArchived ? "Réafficher sur la carte" : "Masquer de la carte"} onClick={() => void toggleHidden(item)} disabled={pending.has(item.id)}>
-                      {item.isArchived ? <Eye size={16} /> : <EyeOff size={16} />}
-                    </IconButton>
-                    <IconButton
-                      label={item.deletable ? "Supprimer définitivement" : `Déjà commandé ${item.timesOrdered} fois : masquez-le plutôt`}
-                      onClick={() => remove(item)}
-                      disabled={!item.deletable || pending.has(item.id)}
-                      danger
-                    >
-                      <Trash2 size={16} />
-                    </IconButton>
+                  <span className="hidden w-24 text-right font-semibold tabular-nums sm:block">{formatPrice(item.price)}</span>
+                  {/* Commandes : sous le plat sur smartphone, alignées à droite au-delà */}
+                  <div className="flex w-full items-center justify-between border-t border-slate-100 pl-[4.25rem] sm:w-auto sm:justify-end sm:border-0 sm:pl-0">
+                    <label className="flex items-center gap-1">
+                      <span className={`text-xs ${item.isAvailable ? "text-emerald-700" : "text-slate-500"}`}>{item.isAvailable ? "En vente" : "Rupture"}</span>
+                      <Switch
+                        checked={item.isAvailable}
+                        disabled={pending.has(item.id) || item.isArchived}
+                        onChange={(v) => void toggleAvailability(item, v)}
+                        label={`${item.name} disponible`}
+                      />
+                    </label>
+                    <div className="flex items-center">
+                      <IconButton label="Modifier" onClick={() => setEditing(item)}>
+                        <Pencil size={18} />
+                      </IconButton>
+                      <IconButton label={item.isArchived ? "Réafficher sur la carte" : "Masquer de la carte"} onClick={() => void toggleHidden(item)} disabled={pending.has(item.id)}>
+                        {item.isArchived ? <Eye size={18} /> : <EyeOff size={18} />}
+                      </IconButton>
+                      <IconButton
+                        label={item.deletable ? "Supprimer définitivement" : `Déjà commandé ${item.timesOrdered} fois : masquez-le plutôt`}
+                        onClick={() => remove(item)}
+                        disabled={!item.deletable || pending.has(item.id)}
+                        danger
+                      >
+                        <Trash2 size={18} />
+                      </IconButton>
+                    </div>
                   </div>
                 </motion.li>
               ))}
@@ -299,7 +303,7 @@ function IconButton({
       disabled={disabled}
       title={label}
       aria-label={label}
-      className={`rounded-lg p-2 text-slate-500 disabled:cursor-not-allowed disabled:opacity-30 ${danger ? "hover:bg-red-50 hover:text-red-600" : "hover:bg-slate-100"}`}
+      className={`flex h-12 w-12 items-center justify-center rounded-lg text-slate-500 disabled:cursor-not-allowed disabled:opacity-30 ${danger ? "hover:bg-red-50 hover:text-red-600" : "hover:bg-slate-100"}`}
     >
       {children}
     </button>

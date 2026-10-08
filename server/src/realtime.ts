@@ -2,10 +2,14 @@ import type { Server as HttpServer } from "node:http";
 import { Server, type Socket } from "socket.io";
 import type { Table } from "@prisma/client";
 import { env } from "./lib/env.js";
-import { authenticate, type AuthUser } from "./lib/auth.js";
+import { z } from "zod";
+import { parseCookie } from "cookie";
+import { authenticate, SESSION_COOKIE, type AuthUser } from "./lib/auth.js";
+import { idSchema, isAllowedOrigin } from "./lib/security.js";
+import type { Actor } from "./lib/audit.js";
 import { HttpError, toErrorPayload } from "./lib/errors.js";
 import { createOrder, updateOrderStatus, type OrderWithRelations } from "./services/orders.js";
-import type { PayResult } from "./services/checkout.js";
+import type { BillChange, PayResult } from "./services/checkout.js";
 import { releaseTableIfIdle } from "./services/tables.js";
 
 /**
@@ -20,6 +24,7 @@ import { releaseTableIfIdle } from "./services/tables.js";
  *   - `order_updated` : changement de statut d'un bon
  *   - `table_updated` : changement de statut d'une table
  *   - `payment_recorded` : versement encaissé (solde restant, addition close ou non)
+ *   - `bill_updated`  : addition modifiée par une remise
  *   - `menu_updated`  : carte modifiée (rupture de stock, plat ajouté / modifié / supprimé)
  */
 export interface ServerToClientEvents {
@@ -28,6 +33,7 @@ export interface ServerToClientEvents {
   table_updated: (table: Pick<Table, "id" | "number" | "status">) => void;
   payment_recorded: (event: PaymentEvent) => void;
   menu_updated: (event: MenuEvent) => void;
+  bill_updated: (event: { tableId: string | null; orderIds: string[]; remaining: number; closed: boolean }) => void;
 }
 
 export interface MenuEvent {
@@ -48,12 +54,26 @@ type Ack<T> = (res: { ok: true; data: T } | { ok: false; error: string }) => voi
 
 export interface ClientToServerEvents {
   new_order: (payload: unknown, ack: Ack<OrderWithRelations>) => void;
-  order_status: (payload: { orderId: string; status: string }, ack: Ack<OrderWithRelations>) => void;
+  order_status: (payload: unknown, ack: Ack<OrderWithRelations>) => void;
 }
 
 interface SocketData {
   user: AuthUser;
+  ip: string | null;
 }
+
+/** IP de l'appareil : X-Forwarded-For seulement si la connexion vient d'un proxy local (cf. TRUST_PROXY). */
+function clientIp(socket: { handshake: { address: string; headers: Record<string, string | string[] | undefined> } }) {
+  const direct = socket.handshake.address;
+  const forwarded = socket.handshake.headers["x-forwarded-for"];
+  const isLoopback = /^(::1|127\.|::ffff:127\.)/.test(direct);
+  if (isLoopback && typeof forwarded === "string") return forwarded.split(",")[0].trim();
+  return direct;
+}
+
+const orderStatusPayload = z
+  .object({ orderId: idSchema, status: z.enum(["PREPARING", "READY", "SERVED", "CANCELLED"]) })
+  .strict();
 
 type IO = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 
@@ -107,6 +127,21 @@ export function broadcastMenuUpdated(event: MenuEvent) {
   getIO().emit("menu_updated", event);
 }
 
+/** Addition modifiée sans encaissement (remise) : caisses à jour, bons / table soldés diffusés. */
+export function broadcastBillChange(result: BillChange) {
+  const io = getIO();
+  io.to([ROOMS.cashier, ROOMS.admin]).emit("bill_updated", {
+    tableId: result.tableId,
+    orderIds: result.orderIds,
+    remaining: result.remaining,
+    closed: result.closed,
+  });
+  for (const order of result.updatedOrders) {
+    io.to([ROOMS.kitchen, ROOMS.floor, ROOMS.cashier, ROOMS.admin]).emit("order_updated", order);
+  }
+  if (result.tableReleased) io.emit("table_updated", result.tableReleased);
+}
+
 /** Après un encaissement : caisses, serveurs et KDS sont mis à jour ; la table libérée est diffusée à tous. */
 export function broadcastPayment(result: PayResult) {
   const io = getIO();
@@ -144,14 +179,24 @@ async function withAck<T>(ack: unknown, fn: () => Promise<T>) {
 }
 
 export function initRealtime(httpServer: HttpServer): IO {
-  io = new Server(httpServer, { cors: { origin: env.corsOrigin } });
+  io = new Server(httpServer, {
+    cors: { origin: env.corsOrigin, credentials: true },
+    maxHttpBufferSize: 100_000, // aligné sur la limite des corps JSON de l'API
+    // Anti « cross-site WebSocket hijacking » : origine vérifiée avant le handshake
+    allowRequest: (req, cb) => {
+      const origin = req.headers.origin;
+      cb(null, !origin || isAllowedOrigin(origin, req.headers.host));
+    },
+  });
 
-  // Authentification à la connexion : le jeton JWT obtenu via /api/auth/login
+  // Authentification au handshake : cookie de session HttpOnly vérifié (signature,
+  // inactivité, compte actif, version de session) AVANT de rejoindre les canaux.
   io.use(async (socket, next) => {
-    const token = socket.handshake.auth?.token;
-    if (typeof token !== "string") return next(new Error("Authentification requise"));
     try {
-      socket.data.user = await authenticate(token);
+      const cookies = parseCookie(socket.handshake.headers.cookie ?? "");
+      const { user } = await authenticate(cookies[SESSION_COOKIE]);
+      socket.data.user = user;
+      socket.data.ip = clientIp(socket);
       next();
     } catch {
       next(new Error("Session expirée"));
@@ -173,8 +218,10 @@ export function initRealtime(httpServer: HttpServer): IO {
 
     socket.on("order_status", (payload, ack) =>
       withAck(ack, async () => {
-        if (!canUpdateStatus(user, payload?.status)) throw new HttpError(403, "Action non autorisée pour ce rôle");
-        const order = await updateOrderStatus(String(payload?.orderId), { status: payload?.status });
+        const { orderId, status } = orderStatusPayload.parse(payload);
+        if (!canUpdateStatus(user, status)) throw new HttpError(403, "Action non autorisée pour ce rôle");
+        const actor: Actor = { ...user, ip: socket.data.ip };
+        const order = await updateOrderStatus(orderId, { status }, actor);
         await broadcastOrderUpdated(order);
         return order;
       }),

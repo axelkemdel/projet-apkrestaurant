@@ -13,6 +13,8 @@ const DISHES_URL = "/uploads/dishes/";
 mkdirSync(DISHES_DIR, { recursive: true });
 
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+const ALLOWED_MIME = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
+type AllowedMime = keyof typeof ALLOWED_MIME;
 
 /**
  * Multer en mémoire : le fichier n'est écrit sur disque qu'après vérification
@@ -20,7 +22,12 @@ const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
  */
 export const imageUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_IMAGE_BYTES, files: 1, fields: 20 },
+  limits: { fileSize: MAX_IMAGE_BYTES, files: 1, fields: 20, fieldSize: 10_000 },
+  // 1er filtre : type MIME déclaré (rejet immédiat, avant lecture du fichier)
+  fileFilter: (_req, file, cb) => {
+    if (Object.hasOwn(ALLOWED_MIME, file.mimetype)) cb(null, true);
+    else cb(new HttpError(400, "Format d'image non supporté (JPEG, PNG ou WebP uniquement)"));
+  },
 }).single("image");
 
 /** Signatures acceptées : JPEG, PNG, WebP. Le SVG est exclu (peut embarquer du script). */
@@ -33,8 +40,12 @@ function detectImageType(buf: Buffer): "jpg" | "png" | "webp" | null {
 
 /** Enregistre l'image d'un plat sous un nom aléatoire et renvoie son URL publique. */
 export async function saveDishImage(file: Express.Multer.File): Promise<string> {
+  // 2e filtre : signature binaire réelle, qui doit correspondre au type déclaré
   const ext = detectImageType(file.buffer);
-  if (!ext) throw new HttpError(400, "Format d'image non supporté (JPEG, PNG ou WebP uniquement)");
+  if (!ext || ALLOWED_MIME[file.mimetype as AllowedMime] !== ext) {
+    throw new HttpError(400, "Format d'image non supporté (JPEG, PNG ou WebP uniquement)");
+  }
+  // Nom aléatoire : le nom d'origine (potentiellement « ../../x.js ») n'est jamais utilisé
   const name = `${randomUUID()}.${ext}`;
   await writeFile(path.join(DISHES_DIR, name), file.buffer);
   return DISHES_URL + name;

@@ -62,6 +62,10 @@ export function Receipt({ data }: { data: ReceiptData }) {
 
       <hr className="receipt-sep" />
       <Row left="TOTAL" right={money(data.totals.total)} strong />
+      {data.discounts.map((d, i) => (
+        <Row key={i} left={`Remise${d.label ? ` ${d.label}` : ""} (${d.reason})`} right={`- ${money(d.amount)}`} />
+      ))}
+      {data.totals.discounted > 0 && <Row left="NET À PAYER" right={money(data.totals.total - data.totals.discounted)} strong />}
       {data.totals.paidBefore > 0 && <Row left="Déjà réglé" right={`- ${money(data.totals.paidBefore)}`} />}
 
       <hr className="receipt-sep receipt-dashed" />

@@ -1,67 +1,174 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { BarChart3, BookOpen, Users } from "lucide-react";
+import { NavLink } from "react-router-dom";
+import { BarChart3, BookOpen, ChefHat, ChevronsLeft, ChevronsRight, LayoutGrid, ScrollText, Users, UtensilsCrossed, Wallet } from "lucide-react";
 import { AppHeader } from "../components/AppHeader";
+import { Modal } from "../components/Modal";
 import { StatsTab } from "../components/admin/StatsTab";
 import { MenuTab } from "../components/admin/MenuTab";
 import { StaffTab } from "../components/admin/StaffTab";
+import { AuditTab } from "../components/admin/AuditTab";
 
 const TABS = [
-  { id: "stats", label: "Aperçu / Stats", Icon: BarChart3 },
-  { id: "menu", label: "Gestion du menu", Icon: BookOpen },
-  { id: "staff", label: "Personnel & PIN", Icon: Users },
+  { id: "stats", label: "Aperçu / Stats", short: "Stats", Icon: BarChart3 },
+  { id: "menu", label: "Gestion du menu", short: "Menu", Icon: BookOpen },
+  { id: "staff", label: "Personnel & PIN", short: "Équipe", Icon: Users },
+  { id: "audit", label: "Journal d'audit", short: "Audit", Icon: ScrollText },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
-function readTab(): TabId {
+const VIEWS = [
+  { to: "/serveur", label: "Salle (serveurs)", Icon: UtensilsCrossed },
+  { to: "/cuisine", label: "Cuisine & Bar", Icon: ChefHat },
+  { to: "/caisse", label: "Caisse", Icon: Wallet },
+];
+
+function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
   try {
-    const v = sessionStorage.getItem("admin-tab");
-    return TABS.some((t) => t.id === v) ? (v as TabId) : "stats";
+    const v = sessionStorage.getItem(key) ?? localStorage.getItem(key);
+    return allowed.includes(v as T) ? (v as T) : fallback;
   } catch {
-    return "stats";
+    return fallback;
   }
 }
 
-export function AdminView() {
-  const [tab, setTab] = useState<TabId>(readTab);
-
-  function select(id: TabId) {
-    setTab(id);
-    try {
-      sessionStorage.setItem("admin-tab", id);
-    } catch {
-      /* onglet non mémorisé */
-    }
+/** Barre latérale dépliée par défaut sur grand écran (> 1024 px), repliée sur tablette. */
+function defaultCollapsed() {
+  try {
+    const saved = localStorage.getItem("admin-sidebar");
+    if (saved === "open") return false;
+    if (saved === "collapsed") return true;
+  } catch {
+    /* préférence indisponible */
   }
+  return window.innerWidth <= 1024;
+}
+
+/**
+ * Tableau de bord gérant, mobile d'abord :
+ *  - smartphone (< 640 px) : barre d'onglets en bas, contenu sur une colonne ;
+ *  - tablette / caisse tactile (640–1024 px) : barre latérale rétractable (icônes) ;
+ *  - grand écran (> 1024 px) : barre latérale dépliée, contenu centré (max-w-7xl).
+ */
+export function AdminView() {
+  const [tab, setTab] = useState<TabId>(() => readPref("admin-tab", TABS.map((t) => t.id), "stats"));
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [viewsOpen, setViewsOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("admin-tab", tab);
+    } catch {
+      /* préférence non mémorisée */
+    }
+  }, [tab]);
+
+  function toggleSidebar() {
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem("admin-sidebar", c ? "open" : "collapsed");
+      } catch {
+        /* préférence non mémorisée */
+      }
+      return !c;
+    });
+  }
+
+  const current = TABS.find((t) => t.id === tab)!;
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader title="Tableau de bord" />
-      <div className="border-b border-slate-200 bg-white px-4">
-        <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto" role="tablist">
-          {TABS.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              role="tab"
-              aria-selected={tab === id}
-              onClick={() => select(id)}
-              className={`relative flex shrink-0 items-center gap-2 px-4 py-3 text-sm font-semibold ${tab === id ? "text-slate-900" : "text-slate-500 hover:text-slate-800"}`}
-            >
-              <Icon size={16} /> {label}
-              {tab === id && <motion.span layoutId="admin-tab" className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-brand-500" />}
-            </button>
-          ))}
-        </nav>
+      <AppHeader title={current.label} hideNav />
+      <div className="flex min-h-0 flex-1">
+        {/* Barre latérale : tablette et plus */}
+        <motion.aside
+          animate={{ width: collapsed ? 76 : 240 }}
+          transition={{ type: "spring", stiffness: 400, damping: 40 }}
+          className="hidden shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white sm:flex"
+        >
+          <nav className="flex flex-1 flex-col gap-1 p-3" role="tablist" aria-orientation="vertical">
+            {TABS.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                role="tab"
+                aria-selected={tab === id}
+                title={collapsed ? label : undefined}
+                onClick={() => setTab(id)}
+                className={`flex min-h-12 items-center gap-3 rounded-xl px-3.5 text-sm font-semibold whitespace-nowrap ${
+                  tab === id ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                <Icon size={20} className="shrink-0" />
+                <span className={collapsed ? "sr-only" : ""}>{label}</span>
+              </button>
+            ))}
+            <div className="my-2 border-t border-slate-100" />
+            {VIEWS.map(({ to, label, Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                title={collapsed ? label : undefined}
+                className="flex min-h-12 items-center gap-3 rounded-xl px-3.5 text-sm font-medium whitespace-nowrap text-slate-500 hover:bg-slate-100"
+              >
+                <Icon size={20} className="shrink-0" />
+                <span className={collapsed ? "sr-only" : ""}>{label}</span>
+              </NavLink>
+            ))}
+          </nav>
+          <button
+            onClick={toggleSidebar}
+            className="m-3 flex min-h-12 items-center justify-center gap-2 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-100"
+            aria-label={collapsed ? "Déplier le menu" : "Replier le menu"}
+          >
+            {collapsed ? <ChevronsRight size={20} /> : <ChevronsLeft size={20} />}
+            {!collapsed && "Replier"}
+          </button>
+        </motion.aside>
+
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-7xl p-3 pb-24 sm:p-4 sm:pb-6 lg:p-6">
+            <AnimatePresence mode="wait">
+              <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
+                {tab === "stats" ? <StatsTab /> : tab === "menu" ? <MenuTab /> : tab === "staff" ? <StaffTab /> : <AuditTab />}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </main>
       </div>
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-7xl p-4">
-          <AnimatePresence mode="wait">
-            <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-              {tab === "stats" ? <StatsTab /> : tab === "menu" ? <MenuTab /> : <StaffTab />}
-            </motion.div>
-          </AnimatePresence>
+
+      {/* Barre d'onglets inférieure : smartphone */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden"
+        role="tablist"
+      >
+        {TABS.map(({ id, short, Icon }) => (
+          <button
+            key={id}
+            role="tab"
+            aria-selected={tab === id}
+            onClick={() => setTab(id)}
+            className={`relative flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold ${tab === id ? "text-brand-600" : "text-slate-500"}`}
+          >
+            {tab === id && <motion.span layoutId="bottom-tab" className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-brand-500" />}
+            <Icon size={22} />
+            {short}
+          </button>
+        ))}
+        <button onClick={() => setViewsOpen(true)} className="flex min-h-16 flex-col items-center justify-center gap-1 text-[11px] font-semibold text-slate-500">
+          <LayoutGrid size={22} />
+          Écrans
+        </button>
+      </nav>
+
+      <Modal open={viewsOpen} onClose={() => setViewsOpen(false)} title="Autres écrans">
+        <div className="grid gap-2">
+          {VIEWS.map(({ to, label, Icon }) => (
+            <NavLink key={to} to={to} className="flex min-h-14 items-center gap-3 rounded-xl bg-slate-50 px-4 font-semibold text-slate-700 active:bg-slate-100">
+              <Icon size={20} /> {label}
+            </NavLink>
+          ))}
         </div>
-      </main>
+      </Modal>
     </div>
   );
 }

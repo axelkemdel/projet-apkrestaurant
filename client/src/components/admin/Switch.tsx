@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 
+/** Interrupteur tactile : piste visuelle de 28 px, zone de toucher de 48 px. */
 export function Switch({
   checked,
   onChange,
@@ -19,15 +20,15 @@ export function Switch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full px-1 transition-colors disabled:opacity-50 ${
-        checked ? "bg-emerald-500" : "bg-slate-300"
-      }`}
+      className="group inline-flex h-12 min-w-14 shrink-0 items-center justify-center disabled:opacity-50"
     >
-      <motion.span
-        layout
-        transition={{ type: "spring", stiffness: 500, damping: 32 }}
-        className={`h-5 w-5 rounded-full bg-white shadow ${checked ? "ml-auto" : ""}`}
-      />
+      <span className={`flex h-7 w-12 items-center rounded-full px-1 transition-colors ${checked ? "bg-emerald-500" : "bg-slate-300"}`}>
+        <motion.span
+          layout
+          transition={{ type: "spring", stiffness: 500, damping: 32 }}
+          className={`h-5 w-5 rounded-full bg-white shadow ${checked ? "ml-auto" : ""}`}
+        />
+      </span>
     </button>
   );
 }

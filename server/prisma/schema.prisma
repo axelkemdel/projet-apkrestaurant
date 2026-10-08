@@ -61,8 +61,10 @@ model User {
   sessionVersion Int      @default(0)
   createdAt      DateTime @default(now())
 
-  orders   Order[]
-  payments Payment[]
+  orders    Order[]
+  payments  Payment[]
+  discounts Discount[]
+  auditLogs AuditLog[]
 }
 
 model Table {
@@ -72,8 +74,9 @@ model Table {
   zone     String      @default("Salle") // ex : Salle, Terrasse, VIP
   status   TableStatus @default(FREE)
 
-  orders   Order[]
-  payments Payment[]
+  orders    Order[]
+  payments  Payment[]
+  discounts Discount[]
 }
 
 model Category {
@@ -123,10 +126,11 @@ model Order {
   servedAt     DateTime?
   paidAt       DateTime? // addition soldée (le bon peut encore être en cuisine)
 
-  table    Table?      @relation(fields: [tableId], references: [id])
-  server   User        @relation(fields: [serverId], references: [id])
-  items    OrderItem[]
-  payments Payment[]
+  table     Table?      @relation(fields: [tableId], references: [id])
+  server    User        @relation(fields: [serverId], references: [id])
+  items     OrderItem[]
+  payments  Payment[]
+  discounts Discount[]
 
   @@index([status])
   @@index([tableId, status])
@@ -191,4 +195,58 @@ model PaymentItem {
 
   @@index([paymentId])
   @@index([orderItemId])
+}
+
+enum DiscountKind {
+  PERCENT
+  AMOUNT
+}
+
+// Remise accordée sur une addition (geste commercial, erreur…). Réduit le solde
+// sans être un encaissement : le chiffre d'affaires reste la somme des Payment.
+model Discount {
+  id        String       @id @default(cuid())
+  tableId   String?
+  cashierId String
+  kind      DiscountKind
+  value     Int // pourcentage (PERCENT) ou montant saisi (AMOUNT)
+  amount    Int // montant effectivement déduit, en FCFA
+  reason    String
+  createdAt DateTime     @default(now())
+
+  table   Table?  @relation(fields: [tableId], references: [id])
+  cashier User    @relation(fields: [cashierId], references: [id])
+  orders  Order[]
+
+  @@index([createdAt])
+}
+
+enum AuditAction {
+  ORDER_CANCELLED
+  DISCOUNT_APPLIED
+  MENU_PRICE_CHANGED
+  MENU_ITEM_CREATED
+  MENU_ITEM_DELETED
+  PIN_RESET
+  USER_CREATED
+  USER_ROLE_CHANGED
+  USER_STATUS_CHANGED
+  LOGIN_LOCKED
+}
+
+// Journal anti-fraude, en AJOUT SEUL : un trigger PostgreSQL refuse UPDATE et DELETE
+// (voir la migration), même pour un gérant ayant accès à la base via l'application.
+model AuditLog {
+  id        String      @id @default(cuid())
+  userId    String? // auteur de l'action (null : action anonyme, ex. tentatives de PIN)
+  action    AuditAction
+  details   Json
+  timestamp DateTime    @default(now())
+  ipAddress String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([timestamp])
+  @@index([action, timestamp])
+  @@index([userId, timestamp])
 }

@@ -1,6 +1,5 @@
 import { createServer } from "node:http";
 import express from "express";
-import cors from "cors";
 import { env } from "./lib/env.js";
 import { prisma } from "./lib/prisma.js";
 import { errorHandler } from "./lib/errors.js";
@@ -12,9 +11,11 @@ import { ordersRouter } from "./routes/orders.js";
 import { checkoutRouter } from "./routes/checkout.js";
 import { adminRouter } from "./routes/admin.js";
 import { UPLOADS_DIR } from "./lib/uploads.js";
+import { applySecurity } from "./lib/security.js";
 
 const app = express();
-app.use(cors({ origin: env.corsOrigin }));
+// helmet, CORS sans joker, cookies, limitation de débit, contrôle d'origine (anti-CSRF)
+applySecurity(app);
 app.use(express.json({ limit: "100kb" }));
 
 app.get("/api/health", (_req, res) => {

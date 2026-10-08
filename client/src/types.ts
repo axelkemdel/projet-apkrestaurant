@@ -138,13 +138,24 @@ export interface BillPayment {
   cashier: { id: string; name: string };
 }
 
+export interface BillDiscount {
+  id: string;
+  kind: "PERCENT" | "AMOUNT";
+  value: number;
+  amount: number;
+  reason: string;
+  createdAt: string;
+  cashier: { id: string; name: string };
+}
+
 export interface Bill {
   target:
     | { kind: "table"; table: { id: string; number: number; zone: string; status: TableStatus } }
     | { kind: "order"; order: { id: string; number: number; type: OrderType } };
   orders: (Omit<Order, "items"> & { items: BillOrderItem[] })[];
   payments: BillPayment[];
-  totals: { total: number; paid: number; remaining: number; unpaidItemsAmount: number };
+  discounts: BillDiscount[];
+  totals: { total: number; discounted: number; paid: number; remaining: number; unpaidItemsAmount: number };
   inKitchen: number;
 }
 
@@ -189,7 +200,8 @@ export interface Receipt {
     reference: string | null;
   };
   history: { number: number; mode: PaymentMode; amount: number; label: string | null; createdAt: string }[];
-  totals: { total: number; paidBefore: number; paidNow: number; remainingAfter: number };
+  discounts: { reason: string; amount: number; label: string | null }[];
+  totals: { total: number; discounted: number; paidBefore: number; paidNow: number; remainingAfter: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +222,7 @@ export interface DailyStats {
   orders: { created: number; served: number; cancelled: number };
   bills: { settled: number; dineIn: number; takeaway: number; averageAmount: number };
   outstanding: number;
+  discounts: { amount: number; count: number };
   paymentsByMode: { mode: PaymentMode; amount: number; count: number }[];
   hourly: { hour: number; revenue: number; orders: number; items: number }[];
 }
@@ -245,4 +258,25 @@ export interface StaffUser {
   role: Role;
   isActive: boolean;
   createdAt: string;
+}
+
+export type AuditAction =
+  | "ORDER_CANCELLED"
+  | "DISCOUNT_APPLIED"
+  | "MENU_PRICE_CHANGED"
+  | "MENU_ITEM_CREATED"
+  | "MENU_ITEM_DELETED"
+  | "PIN_RESET"
+  | "USER_CREATED"
+  | "USER_ROLE_CHANGED"
+  | "USER_STATUS_CHANGED"
+  | "LOGIN_LOCKED";
+
+export interface AuditLogEntry {
+  id: string;
+  action: AuditAction;
+  details: Record<string, unknown>;
+  timestamp: string;
+  ipAddress: string | null;
+  user: { id: string; name: string; role: Role } | null;
 }
