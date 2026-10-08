@@ -1,0 +1,164 @@
+// RestoApp — schéma de base de données (PostgreSQL)
+// Les montants sont stockés en entiers (FCFA, pas de centimes).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SERVEUR
+  CUISINE
+  CAISSE
+}
+
+enum TableStatus {
+  FREE
+  OCCUPIED
+  RESERVED
+}
+
+enum OrderStatus {
+  PENDING // envoyée, pas encore prise en charge
+  PREPARING // en préparation
+  READY // prête à servir
+  SERVED // servie à table
+  PAID // soldée
+  CANCELLED
+}
+
+enum OrderType {
+  DINE_IN
+  TAKEAWAY
+  DELIVERY
+}
+
+// Poste de préparation vers lequel un plat est routé (écran cuisine ou bar)
+enum Station {
+  KITCHEN
+  BAR
+}
+
+enum PaymentMode {
+  CASH
+  CARD
+  ORANGE_MONEY
+  TELECEL_CASH
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  role      Role
+  pinHash   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  orders   Order[]
+  payments Payment[]
+}
+
+model Table {
+  id       String      @id @default(cuid())
+  number   Int         @unique
+  capacity Int         @default(4)
+  zone     String      @default("Salle") // ex : Salle, Terrasse, VIP
+  status   TableStatus @default(FREE)
+
+  orders Order[]
+}
+
+model Category {
+  id      String  @id @default(cuid())
+  name    String  @unique
+  order   Int     @default(0)
+  station Station @default(KITCHEN)
+
+  items MenuItem[]
+}
+
+model MenuItem {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  price       Int
+  categoryId  String
+  isAvailable Boolean  @default(true)
+  // Options de personnalisation :
+  // { "cooking": ["Saignant", "À point"], "sides": ["Frites", "Riz"], "extras": [{ "name": "Fromage", "price": 500 }] }
+  options     Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category   Category    @relation(fields: [categoryId], references: [id])
+  orderItems OrderItem[]
+
+  @@index([categoryId])
+}
+
+model Order {
+  id           String       @id @default(cuid())
+  number       Int          @default(autoincrement()) // n° de bon lisible
+  type         OrderType    @default(DINE_IN)
+  tableId      String?
+  serverId     String
+  status       OrderStatus  @default(PENDING)
+  totalAmount  Int          @default(0)
+  paymentMode  PaymentMode?
+  customerNote String?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  startedAt    DateTime?
+  readyAt      DateTime?
+  servedAt     DateTime?
+  paidAt       DateTime?
+
+  table    Table?      @relation(fields: [tableId], references: [id])
+  server   User        @relation(fields: [serverId], references: [id])
+  items    OrderItem[]
+  payments Payment[]
+
+  @@index([status])
+  @@index([tableId, status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id         String  @id @default(cuid())
+  orderId    String
+  menuItemId String
+  name       String // copie du nom au moment de la commande
+  quantity   Int
+  unitPrice  Int // prix de base + suppléments, figé à la commande
+  notes      String? // ex : "sans oignon"
+  // { "cooking": "À point", "side": "Frites", "extras": [{ "name": "Fromage", "price": 500 }] }
+  modifiers  Json?
+  station    Station @default(KITCHEN)
+  paid       Boolean @default(false) // pour le paiement par article (addition séparée)
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+
+  @@index([orderId])
+}
+
+// Un même bon peut être soldé en plusieurs paiements (addition partagée)
+model Payment {
+  id        String      @id @default(cuid())
+  orderId   String
+  cashierId String
+  amount    Int
+  mode      PaymentMode
+  reference String? // n° de transaction Mobile Money
+  createdAt DateTime    @default(now())
+
+  order   Order @relation(fields: [orderId], references: [id])
+  cashier User  @relation(fields: [cashierId], references: [id])
+
+  @@index([orderId])
+}

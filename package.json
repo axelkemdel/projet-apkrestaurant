@@ -1,0 +1,12 @@
+{
+  "name": "restoapp",
+  "private": true,
+  "workspaces": ["server", "client"],
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w client & wait",
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build": "npm run build -w server && npm run build -w client",
+    "db:setup": "npm run db:migrate -w server && npm run db:seed -w server"
+  }
+}
