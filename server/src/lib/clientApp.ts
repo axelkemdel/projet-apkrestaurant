@@ -26,6 +26,8 @@ const CLIENT_CSP = [
   "frame-ancestors 'none'",
 ].join("; ");
 
+const HASHED_ASSET = /[\\/]assets[\\/][^\\/]+-[\w-]{8,}\.(?:js|css|woff2?)$/;
+
 function clientHeaders(res: Response) {
   res.setHeader("Content-Security-Policy", CLIENT_CSP);
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -43,7 +45,9 @@ export function serveClient(app: Express) {
       index: false,
       setHeaders: (res, path) => {
         clientHeaders(res);
-        res.setHeader("Cache-Control", path.includes(`${"/"}assets${"/"}`) ? "public, max-age=31536000, immutable" : "no-cache");
+        // Seuls les fichiers à empreinte générés par Vite (index-Ab12Cd34.js) sont immuables ;
+        // les images publiques (logo, fond) gardent leur nom : revalidées à chaque chargement
+        res.setHeader("Cache-Control", HASHED_ASSET.test(path) ? "public, max-age=31536000, immutable" : "no-cache");
       },
     }),
   );
