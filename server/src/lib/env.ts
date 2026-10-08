@@ -42,6 +42,11 @@ export const env = {
   trustProxy: process.env.TRUST_PROXY ?? "loopback",
   /** Commande en autonomie par les clients (QR code). false : consultation de la carte et appels seulement. */
   publicOrdering: process.env.PUBLIC_ORDERING !== "false",
+  /** Connexion : échecs tolérés par identifiant et par appareil (IP) sur 5 minutes. */
+  loginMaxAttemptsAccount: Number(process.env.LOGIN_MAX_ATTEMPTS_ACCOUNT ?? 5),
+  loginMaxAttemptsIp: Number(process.env.LOGIN_MAX_ATTEMPTS_IP ?? 10),
+  /** Durée minimale d'une réponse de connexion (anti attaque temporelle). */
+  loginMinResponseMs: Number(process.env.LOGIN_MIN_RESPONSE_MS ?? 800),
 };
 
 if (!env.cookieSecure) {

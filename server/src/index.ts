@@ -14,6 +14,7 @@ import { publicRouter } from "./routes/public.js";
 import { UPLOADS_DIR } from "./lib/uploads.js";
 import { applySecurity } from "./lib/security.js";
 import { langOf, translate } from "./lib/i18n.js";
+import { serveClient } from "./lib/clientApp.js";
 
 const app = express();
 // helmet, CORS sans joker, cookies, limitation de débit, contrôle d'origine (anti-CSRF)
@@ -41,6 +42,8 @@ app.use(
     setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
   }),
 );
+// Interface compilée (production, application Android) : même origine que l'API
+serveClient(app);
 app.use("/api", (req, res) => {
   res.status(404).json({ code: "http.notFound", error: translate(langOf(req), "http.notFound") });
 });

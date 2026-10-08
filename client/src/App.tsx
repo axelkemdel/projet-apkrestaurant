@@ -4,40 +4,36 @@ import { Loader2 } from "lucide-react";
 import { restoreSession } from "./lib/session";
 import { IdleLock } from "./components/IdleLock";
 import { useAuth } from "./store/auth";
-import { Login } from "./pages/Login";
+import { LoginPage } from "./pages/LoginPage";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { HOME_BY_ROLE, ROUTE_ROLES } from "./lib/roles";
 import { ServerView } from "./pages/ServerView";
 import { KitchenView } from "./pages/KitchenView";
 import { CashierView } from "./pages/CashierView";
 import { AdminView } from "./pages/AdminView";
 import { CustomerTableDashboard } from "./pages/CustomerTableDashboard";
 import { Toaster } from "./components/Toasts";
-import type { Role } from "./types";
+import { ServerNotConfigured } from "./components/ServerNotConfigured";
+import { applyOrientation, initNative, isBundledWithoutServer } from "./lib/native";
 
-/** Écran d'accueil par rôle. */
-const homeByRole: Record<Role, string> = {
-  SERVEUR: "/serveur",
-  CUISINE: "/cuisine",
-  CAISSE: "/caisse",
-  ADMIN: "/admin",
-};
-
-function Guard({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
-  const user = useAuth((s) => s.user);
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "ADMIN" && !roles.includes(user.role)) return <Navigate to={homeByRole[user.role]} replace />;
-  return children;
-}
 
 export function App() {
   const user = useAuth((s) => s.user);
   const status = useAuth((s) => s.status);
+  const { pathname } = useLocation();
   // Portail client (QR code) : public, sans session ni verrouillage d'écran
-  const isGuest = useLocation().pathname.startsWith("/qr/");
+  const isGuest = pathname.startsWith("/qr/");
 
   // Au chargement : la session éventuelle est portée par le cookie HttpOnly, on la vérifie auprès du serveur
   useEffect(() => {
-    if (!isGuest) void restoreSession();
+    if (!isGuest && !isBundledWithoutServer) void restoreSession();
   }, [isGuest]);
+
+  // Application Android : barre d'état, clavier, et paysage imposé pour la caisse et la cuisine
+  useEffect(() => void initNative(), []);
+  useEffect(() => void applyOrientation(pathname), [pathname]);
+
+  if (isBundledWithoutServer) return <ServerNotConfigured />;
 
   if (isGuest) {
     return (
@@ -61,40 +57,46 @@ export function App() {
   return (
     <>
       <Routes>
-        <Route path="/login" element={user ? <Navigate to={homeByRole[user.role]} replace /> : <Login />} />
+        <Route path="/login" element={user ? <Navigate to={HOME_BY_ROLE[user.role]} replace /> : <LoginPage />} />
+        {/* Écrans par rôle (RBAC) — l'API revérifie chaque appel */}
         <Route
-          path="/serveur"
+          path="/pos/tables"
           element={
-            <Guard roles={["SERVEUR", "CAISSE"]}>
+            <ProtectedRoute roles={ROUTE_ROLES.pos}>
               <ServerView />
-            </Guard>
+            </ProtectedRoute>
           }
         />
         <Route
-          path="/cuisine"
+          path="/kds/kitchen"
           element={
-            <Guard roles={["CUISINE"]}>
+            <ProtectedRoute roles={ROUTE_ROLES.kds}>
               <KitchenView />
-            </Guard>
+            </ProtectedRoute>
           }
         />
         <Route
-          path="/caisse"
+          path="/cashier/checkout"
           element={
-            <Guard roles={["CAISSE"]}>
+            <ProtectedRoute roles={ROUTE_ROLES.cashier}>
               <CashierView />
-            </Guard>
+            </ProtectedRoute>
           }
         />
+        <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
         <Route
-          path="/admin"
+          path="/admin/:section"
           element={
-            <Guard roles={["ADMIN"]}>
+            <ProtectedRoute roles={ROUTE_ROLES.admin}>
               <AdminView />
-            </Guard>
+            </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to={user ? homeByRole[user.role] : "/login"} replace />} />
+        {/* Anciennes adresses (favoris des tablettes) */}
+        <Route path="/serveur" element={<Navigate to="/pos/tables" replace />} />
+        <Route path="/cuisine" element={<Navigate to="/kds/kitchen" replace />} />
+        <Route path="/caisse" element={<Navigate to="/cashier/checkout" replace />} />
+        <Route path="*" element={<Navigate to={user ? HOME_BY_ROLE[user.role] : "/login"} replace />} />
       </Routes>
       <IdleLock />
       <Toaster />

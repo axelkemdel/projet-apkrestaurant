@@ -3,6 +3,7 @@ import type { Translation } from "./fr";
 // English dictionary — must mirror fr.ts exactly (checked by the Translation type).
 export const en: Translation = {
   admin: {
+    shortUsers: "Team",
     shortTables: "Tables",
     tabTables: "Floor plan & QR",
     collapse: "Collapse",
@@ -148,6 +149,11 @@ export const en: Translation = {
   },
   audit: {
     actions: {
+      ACCESS_DENIED: "Access denied (role)",
+      LOGIN_FAILED: "Failed sign-in",
+      LOGIN_SUCCESS: "Successful sign-in",
+      LOGOUT: "Sign-out",
+      SESSION_REVOKED: "Session revoked",
       TABLE_QR_REGENERATED: "Table QR code regenerated",
       DISCOUNT_APPLIED: "Discount",
       LOGIN_LOCKED: "Profile locked (PIN)",
@@ -164,6 +170,11 @@ export const en: Translation = {
     by: "By {{name}} ({{role}})",
     byUnknown: "By an unidentified device",
     desc: {
+      accessDenied: "{{role}} tried to open {{method}} {{path}}",
+      loginFailed: "Username “{{username}}”: {{reason}}{{device}}",
+      loginSuccess: "{{username}} signed in{{device}}",
+      logout: "Session closed",
+      sessionRevoked: "Old session token replayed: session revoked (possible cookie theft)",
       qrRegenerated: "Table {{table}}: the previous QR code no longer works",
       discount: "{{value}} = {{amount}} on {{total}}{{table}} — “{{reason}}” (cumulative {{pct}}%)",
       itemCreated: "{{name}} at {{price}}",
@@ -177,6 +188,11 @@ export const en: Translation = {
       userCreated: "{{name}} — {{role}}",
       userDeactivated: "{{name}} deactivated",
       userReactivated: "{{name}} reactivated",
+    },
+    reasons: {
+      BAD_PIN: "wrong PIN code",
+      INACTIVE: "account deactivated",
+      UNKNOWN_USER: "unknown username",
     },
     empty: "No actions recorded for these criteria",
     filterAction: "Filter by action type",
@@ -336,9 +352,16 @@ export const en: Translation = {
     warning: "Locking in {{seconds}} s — touch the screen to continue",
   },
   login: {
-    changeProfile: "← Change profile",
-    hello: "Hello {{name}}, enter your code",
-    whoAreYou: "Who are you?",
+    closedRegistration: "Registration closed: accounts are created by the manager.",
+    forgot: "Forgot your PIN? Ask your manager.",
+    pin: "PIN code",
+    secure: "Encrypted sign-in · locks after 5 min of inactivity",
+    shuffle: "Shuffled keypad",
+    shuffleHint: "Keys move after every attempt, against prying eyes",
+    subtitle: "Username and PIN provided by your manager",
+    title: "Secure sign-in",
+    username: "Username",
+    usernamePlaceholder: "e.g. awa",
   },
   menuAdmin: {
     add: "Add",
@@ -383,6 +406,10 @@ export const en: Translation = {
     floorLong: "Floor (waiters)",
     kitchen: "Kitchen",
     kitchenLong: "Kitchen & Bar",
+  },
+  native: {
+    notConfiguredText: "This app was not built with the address of the restaurant's RestoApp server. Rebuild the APK with that address:",
+    notConfiguredTitle: "Server not configured",
   },
   order: {
     addFor: "Add · {{price}}",
@@ -498,6 +525,11 @@ export const en: Translation = {
     SERVEUR: "Waiter",
   },
   staff: {
+    colUsername: "Username",
+    lastLogin: "Last sign-in: {{date}}",
+    neverLoggedIn: "Never signed in",
+    username: "Sign-in username",
+    usernameHint: "3 to 32 characters: lowercase letters, digits, dot, dash. Typed by the employee on the sign-in screen.",
     active: "Active",
     colName: "Name",
     colPin: "PIN code",

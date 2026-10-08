@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Ban, BadgePercent, KeyRound, Loader2, Lock, QrCode, RefreshCw, ShieldCheck, Tag, Trash2, UserCog, UserPlus, UtensilsCrossed } from "lucide-react";
+import { Ban, BadgePercent, KeyRound, LogIn, LogOut, Loader2, Lock, QrCode, RefreshCw, ShieldAlert, ShieldX, ShieldCheck, Tag, Trash2, UserCog, UserPlus, UtensilsCrossed } from "lucide-react";
 import { api } from "../../lib/api";
 import { formatDateTime, formatPrice } from "../../lib/format";
 import { useTranslation } from "react-i18next";
@@ -21,7 +21,22 @@ const ACTIONS: Record<AuditAction, { Icon: typeof Ban; tone: string }> = {
   USER_STATUS_CHANGED: { Icon: UserCog, tone: "bg-sky-50 text-sky-800" },
   LOGIN_LOCKED: { Icon: Lock, tone: "bg-red-50 text-red-700" },
   TABLE_QR_REGENERATED: { Icon: QrCode, tone: "bg-slate-100 text-slate-700" },
+  LOGIN_SUCCESS: { Icon: LogIn, tone: "bg-emerald-50 text-emerald-700" },
+  LOGIN_FAILED: { Icon: ShieldX, tone: "bg-amber-50 text-amber-800" },
+  LOGOUT: { Icon: LogOut, tone: "bg-slate-100 text-slate-700" },
+  SESSION_REVOKED: { Icon: ShieldAlert, tone: "bg-red-50 text-red-700" },
+  ACCESS_DENIED: { Icon: ShieldAlert, tone: "bg-red-50 text-red-700" },
 };
+
+/** Appareil (navigateur / application) déduit du User-Agent journalisé. */
+function device(ua: unknown): string {
+  const s = typeof ua === "string" ? ua : "";
+  if (!s) return "";
+  const os = /Android/.test(s) ? "Android" : /iPhone|iPad/.test(s) ? "iOS" : /Windows/.test(s) ? "Windows" : /Mac OS/.test(s) ? "macOS" : /Linux/.test(s) ? "Linux" : "";
+  const app = /wv\)|; wv/.test(s) ? "app" : /Edg\//.test(s) ? "Edge" : /Chrome\//.test(s) ? "Chrome" : /Firefox\//.test(s) ? "Firefox" : /Safari\//.test(s) ? "Safari" : "";
+  const label = [app, os].filter(Boolean).join(" · ");
+  return label ? ` (${label})` : "";
+}
 
 const n = (v: unknown) => Number(v ?? 0);
 const s = (v: unknown) => String(v ?? "");
@@ -79,9 +94,21 @@ function describe(e: AuditLogEntry, t: TFunction, lang: Lang): string {
     case "USER_STATUS_CHANGED":
       return t(d.isActive ? "audit.desc.userReactivated" : "audit.desc.userDeactivated", { name: s(d.name) });
     case "LOGIN_LOCKED":
-      return t("audit.desc.loginLocked", { name: s(d.targetName) });
+      return t("audit.desc.loginLocked", { name: s(d.targetName ?? d.targetUsername) });
     case "TABLE_QR_REGENERATED":
       return t("audit.desc.qrRegenerated", { table: s(d.table) });
+    case "LOGIN_SUCCESS":
+      return t("audit.desc.loginSuccess", { username: s(d.username), device: device(d.userAgent) });
+    case "LOGIN_FAILED": {
+      const reason = ["UNKNOWN_USER", "BAD_PIN", "INACTIVE"].includes(s(d.reason)) ? t(`audit.reasons.${d.reason as "BAD_PIN"}`) : s(d.reason);
+      return t("audit.desc.loginFailed", { username: s(d.username), reason, device: device(d.userAgent) });
+    }
+    case "LOGOUT":
+      return t("audit.desc.logout");
+    case "SESSION_REVOKED":
+      return t("audit.desc.sessionRevoked");
+    case "ACCESS_DENIED":
+      return t("audit.desc.accessDenied", { role: roleName(d.role, t), method: s(d.method), path: s(d.path) });
   }
 }
 

@@ -7,6 +7,7 @@ import { api } from "../../lib/api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../store/auth";
 import type { Role, StaffUser } from "../../types";
+import { formatDateTime } from "../../lib/format";
 
 const ROLES: Role[] = ["SERVEUR", "CUISINE", "CAISSE", "ADMIN"];
 const roleStyle: Record<Role, string> = {
@@ -22,7 +23,7 @@ export function StaffTab() {
   const [users, setUsers] = useState<StaffUser[] | null>(null);
   const [editing, setEditing] = useState<StaffUser | null | undefined>(undefined);
   const [resetting, setResetting] = useState<StaffUser | null>(null);
-  const [revealed, setRevealed] = useState<{ name: string; pin: string } | null>(null);
+  const [revealed, setRevealed] = useState<{ name: string; username: string; pin: string } | null>(null);
 
   const load = useCallback(() => {
     api<StaffUser[]>("/admin/users")
@@ -75,6 +76,7 @@ export function StaffTab() {
                   {u.name}
                   {u.id === me?.id && <span className="ml-1.5 text-xs font-normal text-slate-400">{t("staff.you")}</span>}
                 </div>
+                <UserMeta user={u} />
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
                   <span className={`rounded-full px-2.5 py-1 font-semibold ${roleStyle[u.role]}`}>{t(`roles.${u.role}`)}</span>
                   <span className={`flex items-center gap-1 ${u.isActive ? "text-emerald-700" : "text-slate-500"}`}>
@@ -134,6 +136,7 @@ export function StaffTab() {
                 <td className="px-4 py-3 font-medium">
                   {u.name}
                   {u.id === me?.id && <span className="ml-2 text-xs font-normal text-slate-400">{t("staff.you")}</span>}
+                  <UserMeta user={u} />
                 </td>
                 <td className="px-4 py-3">
                   <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${roleStyle[u.role]}`}>{t(`roles.${u.role}`)}</span>
@@ -181,10 +184,10 @@ export function StaffTab() {
         user={editing}
         isSelf={editing?.id === me?.id}
         onClose={() => setEditing(undefined)}
-        onSaved={(pin, name) => {
+        onSaved={(pin, name, username) => {
           setEditing(undefined);
           load();
-          if (pin) setRevealed({ name, pin });
+          if (pin) setRevealed({ name, username, pin });
           else toast.success(t("staff.profileUpdated"));
         }}
       />
@@ -193,7 +196,7 @@ export function StaffTab() {
         isSelf={resetting?.id === me?.id}
         onClose={() => setResetting(null)}
         onDone={(pin) => {
-          setRevealed({ name: resetting!.name, pin });
+          setRevealed({ name: resetting!.name, username: resetting!.username, pin });
           setResetting(null);
         }}
       />
@@ -242,6 +245,18 @@ function PinChoice({ mode, onMode, pin, onPin }: { mode: "auto" | "manual"; onMo
   );
 }
 
+/** Identifiant de connexion et dernière connexion (jamais le PIN, qui n'est pas lisible). */
+function UserMeta({ user }: { user: StaffUser }) {
+  const { t } = useTranslation();
+  return (
+    <div className="mt-0.5 text-xs font-normal text-slate-500">
+      <span className="font-mono">@{user.username}</span>
+      {" · "}
+      {user.lastLoginAt ? t("staff.lastLogin", { date: formatDateTime(user.lastLoginAt) }) : t("staff.neverLoggedIn")}
+    </div>
+  );
+}
+
 function UserForm({
   user,
   isSelf,
@@ -251,10 +266,11 @@ function UserForm({
   user: StaffUser | null | undefined;
   isSelf: boolean;
   onClose: () => void;
-  onSaved: (pin: string | null, name: string) => void;
+  onSaved: (pin: string | null, name: string, username: string) => void;
 }) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [role, setRole] = useState<Role>("SERVEUR");
   const [pinMode, setPinMode] = useState<"auto" | "manual">("auto");
   const [pin, setPin] = useState("");
@@ -263,6 +279,7 @@ function UserForm({
   useEffect(() => {
     if (user === undefined) return;
     setName(user?.name ?? "");
+    setUsername(user?.username ?? "");
     setRole(user?.role ?? "SERVEUR");
     setPinMode("auto");
     setPin("");
@@ -273,14 +290,14 @@ function UserForm({
     setSaving(true);
     try {
       if (user) {
-        await api(`/admin/users/${user.id}`, { method: "PUT", body: JSON.stringify({ name: name.trim(), role }) });
-        onSaved(null, name);
+        await api(`/admin/users/${user.id}`, { method: "PUT", body: JSON.stringify({ name: name.trim(), username: username.trim().toLowerCase(), role }) });
+        onSaved(null, name, username);
       } else {
         const res = await api<{ pin: string }>("/admin/users", {
           method: "POST",
-          body: JSON.stringify({ name: name.trim(), role, ...(pinMode === "manual" && { pin }) }),
+          body: JSON.stringify({ name: name.trim(), username: username.trim().toLowerCase(), role, ...(pinMode === "manual" && { pin }) }),
         });
-        onSaved(res.pin, name.trim());
+        onSaved(res.pin, name.trim(), username.trim().toLowerCase());
       }
     } catch (err) {
       toast.error((err as Error).message);
@@ -295,6 +312,21 @@ function UserForm({
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-slate-700">{t("staff.displayName")}</span>
           <input required maxLength={60} value={name} onChange={(e) => setName(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-brand-500" />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-sm font-semibold text-slate-700">{t("staff.username")}</span>
+          <input
+            required
+            minLength={3}
+            maxLength={32}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            value={username}
+            onChange={(e) => setUsername(e.target.value.replace(/\s/g, "").toLowerCase())}
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 font-mono outline-none focus:border-brand-500"
+          />
+          <span className="mt-1 block text-xs text-slate-500">{t("staff.usernameHint")}</span>
         </label>
         <fieldset>
           <legend className="mb-1 text-sm font-semibold text-slate-700">{t("staff.colRole")}</legend>
@@ -363,11 +395,14 @@ function PinResetForm({ user, isSelf, onClose, onDone }: { user: StaffUser | nul
   );
 }
 
-function PinReveal({ data, onClose }: { data: { name: string; pin: string } | null; onClose: () => void }) {
+function PinReveal({ data, onClose }: { data: { name: string; username: string; pin: string } | null; onClose: () => void }) {
   const { t } = useTranslation();
   return (
     <Modal open={data !== null} onClose={onClose} title={t("staff.pinOf", { name: data?.name ?? "" })}>
       <div className="space-y-4 text-center">
+        <p className="text-sm text-slate-600">
+          {t("login.username")} : <span className="font-mono font-bold text-slate-900">{data?.username}</span>
+        </p>
         <div className="flex justify-center gap-2">
           {data?.pin.split("").map((d, i) => (
             <motion.span

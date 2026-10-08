@@ -1,20 +1,35 @@
-import { api } from "./api";
+import { api, refreshSession } from "./api";
 import { connectSocket, disconnectSocket } from "./socket";
 import { useAuth } from "../store/auth";
 import { useCart } from "../store/cart";
 import type { Role, User } from "../types";
 
 /**
- * Verrouillage automatique après inactivité (minutes), par rôle. Les écrans
- * cuisine sont des affichages muraux permanents : jamais verrouillés.
- * Le serveur ferme de toute façon une session inactive (SESSION_IDLE_MINUTES).
+ * Verrouillage automatique après inactivité tactile ou clavier (minutes), par rôle.
+ * Les écrans cuisine (KDS) sont des affichages muraux permanents que personne ne
+ * touche pendant le service : ils ne sont jamais verrouillés (leur session reste
+ * bornée à 14 h côté serveur). Le serveur ferme de toute façon une session inactive.
  */
 export const IDLE_LOCK_MINUTES: Record<Role, number | null> = {
   ADMIN: 5,
   CAISSE: 5,
-  SERVEUR: 10,
+  SERVEUR: 5,
   CUISINE: null,
 };
+
+/** Le jeton d'accès vit 15 min : renouvelé toutes les 12 min tant que l'écran est utilisé. */
+const REFRESH_EVERY_MS = 12 * 60_000;
+let lastActivity = Date.now();
+if (typeof window !== "undefined") {
+  for (const e of ["pointerdown", "keydown"]) window.addEventListener(e, () => (lastActivity = Date.now()), { passive: true });
+  setInterval(async () => {
+    const { user, locked } = useAuth.getState();
+    if (!user || locked) return;
+    // Sans activité, on laisse la session expirer (sauf écran cuisine, affichage permanent)
+    if (user.role !== "CUISINE" && Date.now() - lastActivity > REFRESH_EVERY_MS) return;
+    if (!(await refreshSession())) useAuth.getState().expire();
+  }, REFRESH_EVERY_MS);
+}
 
 export async function restoreSession() {
   // Nettoyage : anciennes versions stockaient un jeton dans localStorage
@@ -24,6 +39,7 @@ export async function restoreSession() {
     /* stockage indisponible */
   }
   try {
+    // Le serveur renouvelle silencieusement un jeton d'accès expiré (cookie de rafraîchissement)
     const { user } = await api<{ user: User | null }>("/auth/me");
     if (!user) return useAuth.getState().clear();
     useAuth.getState().setSession(user);
@@ -33,14 +49,16 @@ export async function restoreSession() {
   }
 }
 
-export async function loginWithPin(userId: string, pin: string) {
-  const { user } = await api<{ user: User }>("/auth/login", { method: "POST", body: JSON.stringify({ userId, pin }) });
+/** Connexion par identifiant + code PIN ; les jetons sont posés en cookies HttpOnly par le serveur. */
+export async function loginWithCredentials(username: string, pin: string) {
+  const { user } = await api<{ user: User }>("/auth/login", { method: "POST", body: JSON.stringify({ username, pin }) });
+  lastActivity = Date.now();
   useAuth.getState().setSession(user);
   connectSocket();
   return user;
 }
 
-/** Verrouille l'écran : session serveur fermée, socket coupé, saisie du PIN requise pour reprendre. */
+/** Verrouille l'écran : session serveur révoquée, socket coupé, saisie du PIN requise pour reprendre. */
 export async function lockSession() {
   useAuth.getState().setLocked();
   disconnectSocket();

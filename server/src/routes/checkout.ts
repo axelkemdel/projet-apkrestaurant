@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { actorOf, requireAuth } from "../lib/auth.js";
+import { actorOf } from "../lib/auth.js";
+import { requireAuth } from "../middleware/requireRole.js";
 import { validateIdParams } from "../lib/security.js";
 import {
   applyDiscount,
@@ -15,7 +16,7 @@ export const checkoutRouter = Router();
 validateIdParams(checkoutRouter, "tableId", "orderId", "paymentId");
 
 // Toutes les routes caisse : rôle CAISSE (ADMIN passe toujours)
-checkoutRouter.use(requireAuth("CAISSE"));
+checkoutRouter.use(...requireAuth("CAISSE"));
 
 /** Plan de salle de la caisse : solde de chaque table + bons à emporter non réglés. */
 checkoutRouter.get("/overview", async (_req, res) => {

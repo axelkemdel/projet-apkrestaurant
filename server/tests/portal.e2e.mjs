@@ -14,11 +14,9 @@ import { io } from "socket.io-client";
 
 const BASE = "http://localhost:4000";
 const API = `${BASE}/api`;
-const users = await fetch(`${API}/auth/users`).then((r) => r.json());
-const uid = (n) => users.find((u) => u.name.startsWith(n)).id;
 async function login(n, pin) {
-  const r = await fetch(`${API}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: uid(n), pin }) });
-  const cookie = (r.headers.get("set-cookie") ?? "").split(";")[0];
+  const r = await fetch(`${API}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: n.toLowerCase(), pin }) });
+  const cookie = r.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ");
   if (!cookie) throw new Error("login failed " + n);
   return cookie;
 }

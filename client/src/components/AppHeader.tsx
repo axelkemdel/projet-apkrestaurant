@@ -38,10 +38,10 @@ export function AppHeader({
         <nav className="hidden gap-1 md:flex">
           {(
             [
-              ["/serveur", t("nav.floor")],
-              ["/cuisine", t("nav.kitchen")],
-              ["/caisse", t("nav.cashier")],
-              ["/admin", t("nav.admin")],
+              ["/pos/tables", t("nav.floor")],
+              ["/kds/kitchen", t("nav.kitchen")],
+              ["/cashier/checkout", t("nav.cashier")],
+              ["/admin/dashboard", t("nav.admin")],
             ] as const
           ).map(([to, label]) => (
             <NavLink

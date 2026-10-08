@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { actorOf, requireAuth } from "../lib/auth.js";
+import { actorOf } from "../lib/auth.js";
+import { requireAuth } from "../middleware/requireRole.js";
 import { validateIdParams } from "../lib/security.js";
 import { listAuditLogs } from "../services/auditLogs.js";
 import { imageUpload } from "../lib/uploads.js";
@@ -14,7 +15,8 @@ import {
   updateCategory,
   updateMenuItem,
 } from "../services/adminMenu.js";
-import { createUser, listUsers, resetPin, updateUser } from "../services/adminUsers.js";
+import { createUser, createUserSchema, listUsers, resetPin, updateUser, updateUserSchema } from "../services/adminUsers.js";
+import { validateBody } from "../middleware/validateZod.js";
 import { createTable, deleteTable, listAdminTables, listReviews, regenerateQr, updateTable } from "../services/adminTables.js";
 import { broadcastMenuUpdated, broadcastTable, disconnectTableCustomers, disconnectUser } from "../realtime.js";
 import { clearLoginFailures } from "./auth.js";
@@ -23,7 +25,7 @@ export const adminRouter = Router();
 validateIdParams(adminRouter, "id");
 
 // Tout le back-office est réservé au gérant
-adminRouter.use(requireAuth("ADMIN"));
+adminRouter.use(...requireAuth("ADMIN"));
 
 const id = (v: unknown) => String(v);
 const menuEvent = (item: { id: string; nameFr: string; nameEn: string; isAvailable: boolean; isArchived: boolean }) => ({
@@ -103,11 +105,11 @@ adminRouter.get("/users", async (_req, res) => {
 });
 
 /** Création d'un profil ; le PIN (saisi ou généré) est renvoyé une seule fois. */
-adminRouter.post("/users", async (req, res) => {
+adminRouter.post("/users", validateBody(createUserSchema), async (req, res) => {
   res.status(201).json(await createUser(req.body, actorOf(req)));
 });
 
-adminRouter.put("/users/:id", async (req, res) => {
+adminRouter.put("/users/:id", validateBody(updateUserSchema), async (req, res) => {
   const { user, revoked } = await updateUser(id(req.params.id), req.body, actorOf(req));
   if (revoked) disconnectUser(user.id);
   res.json(user);
@@ -116,7 +118,7 @@ adminRouter.put("/users/:id", async (req, res) => {
 /** Réinitialise le PIN ({ pin } ou généré) ; renvoyé une seule fois, sessions de l'employé fermées. */
 adminRouter.put("/users/:id/pin", async (req, res) => {
   const { user, pin, revoked } = await resetPin(id(req.params.id), req.body, actorOf(req));
-  clearLoginFailures(user.id);
+  clearLoginFailures(user.username);
   if (revoked) disconnectUser(user.id);
   res.json({ user, pin });
 });

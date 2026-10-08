@@ -1,6 +1,6 @@
 import { Router, type Request } from "express";
-import { rateLimit, ipKeyGenerator } from "express-rate-limit";
-import { langOf, translate, type MessageKey } from "../lib/i18n.js";
+import type { MessageKey } from "../lib/i18n.js";
+import { keyedLimiter } from "../middleware/rateLimiter.js";
 import {
   createCustomerOrder,
   createReview,
@@ -19,18 +19,7 @@ export const publicRouter = Router();
 
 const tokenOf = (req: Request) => String(req.params.token ?? req.body?.token ?? "").slice(0, 64);
 
-function limiter(windowMs: number, limit: number, code: MessageKey) {
-  return rateLimit({
-    windowMs,
-    limit,
-    standardHeaders: "draft-8",
-    legacyHeaders: false,
-    keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? "unknown")}:${tokenOf(req)}`,
-    handler: (req, res, _next, options) => {
-      res.status(options.statusCode).json({ code, error: translate(langOf(req), code) });
-    },
-  });
-}
+const limiter = (windowMs: number, limit: number, code: MessageKey) => keyedLimiter(windowMs, limit, code, tokenOf);
 
 const readLimit = limiter(60_000, 120, "http.tooManyRequests");
 const orderLimit = limiter(10 * 60_000, 8, "portal.tooManyOrders");

@@ -4,10 +4,11 @@ import type { Table } from "@prisma/client";
 import { env } from "./lib/env.js";
 import { z } from "zod";
 import { parseCookie } from "cookie";
-import { authenticate, SESSION_COOKIE, type AuthUser } from "./lib/auth.js";
+import { ACCESS_COOKIE, authenticate, type AuthUser } from "./lib/auth.js";
 import { idSchema, isAllowedOrigin } from "./lib/security.js";
 import type { Actor } from "./lib/audit.js";
 import { HttpError, toErrorPayload } from "./lib/errors.js";
+import { prisma } from "./lib/prisma.js";
 import { parseLang, type Lang } from "./lib/i18n.js";
 import { createOrder, updateOrderStatus, type OrderWithRelations } from "./services/orders.js";
 import type { BillChange, PayResult } from "./services/checkout.js";
@@ -93,6 +94,8 @@ export interface ClientToServerEvents {
 
 interface SocketData {
   user: AuthUser;
+  /** Session (appareil) ayant ouvert la connexion : revérifiée périodiquement */
+  sessionId: string;
   ip: string | null;
   /** Langue de l'écran, pour traduire les erreurs renvoyées dans les accusés de réception */
   lang: Lang;
@@ -176,6 +179,31 @@ const userRoom = (userId: string) => `user:${userId}`;
 /** Coupe les connexions temps réel d'un employé (PIN réinitialisé, compte désactivé…). */
 export function disconnectUser(userId: string) {
   getIO().in(userRoom(userId)).disconnectSockets(true);
+}
+
+const sessionRoom = (sessionId: string) => `session:${sessionId}`;
+
+/** Déconnexion / session révoquée : le temps réel de cet appareil est coupé immédiatement. */
+export function disconnectSession(sessionId: string) {
+  getIO().in(sessionRoom(sessionId)).disconnectSockets(true);
+}
+
+/**
+ * Zero-Trust : une connexion Socket.io ouverte n'est pas un blanc-seing. Toutes les
+ * 60 s, les sessions des connexions ouvertes sont revérifiées en base ; une session
+ * révoquée, expirée ou un compte désactivé ferme la connexion.
+ */
+const REVALIDATE_EVERY_MS = 60_000;
+async function revalidateSockets() {
+  const sockets = await getIO().fetchSockets();
+  const ids = [...new Set(sockets.map((s) => s.data.sessionId).filter(Boolean))];
+  if (ids.length === 0) return;
+  const valid = await prisma.authSession.findMany({
+    where: { id: { in: ids }, revokedAt: null, expiresAt: { gt: new Date() }, user: { isActive: true } },
+    select: { id: true },
+  });
+  const ok = new Set(valid.map((v) => v.id));
+  for (const id of ids) if (!ok.has(id)) disconnectSession(id);
 }
 
 export function getIO(): IO {
@@ -274,8 +302,9 @@ export function initRealtime(httpServer: HttpServer): IO {
   io.use(async (socket, next) => {
     try {
       const cookies = parseCookie(socket.handshake.headers.cookie ?? "");
-      const { user } = await authenticate(cookies[SESSION_COOKIE]);
+      const { user, sessionId } = await authenticate(cookies[ACCESS_COOKIE]);
       socket.data.user = user;
+      socket.data.sessionId = sessionId;
       socket.data.ip = clientIp(socket);
       socket.data.lang = parseLang(socket.handshake.auth?.lang);
       next();
@@ -303,7 +332,7 @@ export function initRealtime(httpServer: HttpServer): IO {
 
   io.on("connection", (socket: Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>) => {
     const { user } = socket.data;
-    socket.join([...roomsByRole[user.role], userRoom(user.id)]);
+    socket.join([...roomsByRole[user.role], userRoom(user.id), sessionRoom(socket.data.sessionId)]);
 
     socket.on("new_order", (payload, ack) =>
       withAck(ack, async () => {
@@ -330,6 +359,8 @@ export function initRealtime(httpServer: HttpServer): IO {
       }, socket.data.lang),
     );
   });
+
+  setInterval(() => void revalidateSockets().catch((e) => console.error("Revalidation des sockets", e)), REVALIDATE_EVERY_MS).unref();
 
   return io;
 }

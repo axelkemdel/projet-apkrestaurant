@@ -7,6 +7,7 @@ Application de gestion des commandes : prise de commande par les serveurs (table
 > **Module 3** : Tableau de bord gérant — KPI et graphiques en temps réel, gestion de la carte (ruptures diffusées en direct, images), personnel et codes PIN.
 > **Module 5** : Multilingue FR / EN — interface intégralement traduite (sélecteur sur tous les écrans), carte et bons bilingues, bascule de traduction des bons en cuisine et en caisse, tickets dans la langue du client, erreurs serveur traduites.
 > **Module 6** : Portail client par QR code — chaque table a un QR code secret : carte bilingue avec photos, commande envoyée directement en cuisine, suivi des plats en direct, appel du serveur, demande d'addition, avis 1 à 5 étoiles ; génération / impression des QR codes dans le tableau de bord.
+> **Module 7** : Connexion « Zero-Trust » (identifiant + PIN, pavé mélangé, jetons d'accès 15 min + rafraîchissement rotatif, réponses uniformes à durée constante, routes par rôle) et application Android (Capacitor) pour les tablettes.
 > **Module 4** : Sécurité & responsive — session en cookie HttpOnly, verrouillage après inactivité, helmet / CORS / anti-CSRF / limitation de débit, validation Zod stricte, remises plafonnées, journal d'audit anti-fraude en ajout seul, recadrage d'images, interface mobile-first (barre d'onglets, tiroirs, cibles de 48 px).
 
 ## Stack
@@ -67,12 +68,14 @@ npm run dev                          # API sur :4000, front sur :5173
 
 Ouvrez http://localhost:5173 (ou `http://<ip-du-poste>:5173` depuis une tablette du même réseau).
 
-| Profil | PIN | Écran |
+Comptes de démonstration (identifiant + PIN, à changer avant toute mise en service) :
+
+| Identifiant | PIN | Écran après connexion |
 | --- | --- | --- |
-| Awa / Issa (serveurs) | 1111 / 2222 | Vue Serveur |
-| Cuisine | 3333 | Vue Cuisine & Bar |
-| Caisse | 4444 | Vue Caisse |
-| Admin | 0000 | Tableau de bord + accès à tout (onglets Salle / Cuisine / Caisse / Gérant) |
+| `awa` / `issa` (serveurs) | 1111 / 2222 | `/pos/tables` — prise de commande |
+| `cuisine` | 3333 | `/kds/kitchen` — écran Cuisine & Bar |
+| `caisse` | 4444 | `/cashier/checkout` — caisse |
+| `admin` | 0000 | `/admin/dashboard` — tableau de bord + accès à tout |
 
 Astuce démo : ouvrez la Vue Cuisine dans une fenêtre et la Vue Serveur dans une autre (navigation privée) ; la commande apparaît instantanément côté cuisine.
 
@@ -282,4 +285,64 @@ L'adresse encodée est celle depuis laquelle l'administration est ouverte, ou `V
 **Migration** — `20261009100000_customer_portal` : jeton QR généré pour les tables existantes, `Order.source`, `Order.serverId` facultatif, demandes en attente sur `Table`, modèle `Review` (note contrainte entre 1 et 5 en base).
 
 **Vérification** — `npm run test:portal -w server` (API démarrée, base de démo fraîche : `npm run db:seed -w server`).
+
+## Connexion « Zero-Trust » (Module 7)
+
+**Écran de connexion (`/login`, `client/src/pages/LoginPage.tsx`)** — aucune liste de comptes n'est affichée ni renvoyée par l'API (`/api/auth/users` supprimée) : l'employé saisit son **identifiant** puis son **code PIN** (4 à 6 chiffres) sur un pavé tactile. Le pavé est **mélangé** par défaut (tirage cryptographique, nouvelle disposition après chaque échec) contre les regards indiscrets ; le clavier physique est aussi accepté. Sélecteur FR / EN en haut à droite. **Pas d'inscription** : seul le gérant crée les comptes (« Personnel & PIN », `/admin/users` : nom, identifiant, rôle, PIN haché, actif / inactif).
+
+**Redirection par rôle** — `ADMIN → /admin/dashboard`, `SERVEUR → /pos/tables`, `CUISINE → /kds/kitchen`, `CAISSE → /cashier/checkout`. Côté écran, `ProtectedRoute` renvoie vers l'écran du rôle ; côté API, chaque route passe par `authenticateJWT` puis `requireRole` (chaque refus 403 est journalisé). Les anciennes adresses (`/serveur`, `/cuisine`, `/caisse`) redirigent.
+
+**Jetons et sessions** (`server/src/lib/auth.ts`)
+- **Jeton d'accès** : JWT HS256 de **15 min** (émetteur / audience vérifiés, type « access », sans rôle ni donnée sensible), cookie `HttpOnly` + `SameSite=Strict` + `Secure`. À chaque requête, la session et le compte sont **relus en base** : déconnexion, désactivation, changement de rôle ou de PIN prennent effet immédiatement.
+- **Jeton de rafraîchissement** : 32 octets aléatoires, cookie `HttpOnly` limité au chemin `/api/auth`, stocké **haché (SHA-256)** dans `AuthSession`. **Rotation** à chaque rafraîchissement ; la présentation d'un ancien jeton (cookie volé ou rejoué) **révoque toute la session**. Limite absolue 14 h.
+- L'écran renouvelle le jeton d'accès toutes les 12 min s'il est utilisé ; une requête refusée pour jeton expiré est rejouée une fois après rafraîchissement.
+- **Verrouillage après 5 min** sans toucher l'écran ni le clavier (serveur, caisse, gérant) : la session est révoquée côté serveur et le PIN est redemandé (sur un pavé mélangé). Les écrans cuisine (affichage mural permanent) ne se verrouillent pas.
+- Les connexions **Socket.io** s'authentifient avec le jeton d'accès, sont coupées à la déconnexion ou à la révocation, et sont revérifiées en base toutes les 60 s.
+
+**Anti force brute & anti attaque temporelle**
+- Message **unique** « Identifiants invalides » (identifiant inconnu, PIN faux ou mal formé, compte désactivé), sans cookie posé.
+- **Durée constante** : toute réponse de connexion, réussie ou non, part au plus tôt après 800 ms (`LOGIN_MIN_RESPONSE_MS`) ; une comparaison bcrypt est toujours faite (empreinte factice si l'identifiant n'existe pas).
+- `express-rate-limit` : **5 échecs / 5 min par identifiant** (bloqué sur tous les appareils, même avec le bon PIN) et **10 échecs / 5 min par appareil** (IP), réglables (`LOGIN_MAX_ATTEMPTS_ACCOUNT`, `LOGIN_MAX_ATTEMPTS_IP`). Le seuil par IP est un peu plus large car les tablettes d'un restaurant sortent souvent par la même adresse. Message identique dans les deux cas.
+- PIN hachés par **bcrypt (coût 12)** ; les anciens hachages sont mis à niveau automatiquement à la connexion.
+
+**Journal d'audit** — chaque tentative est tracée avec l'IP et l'appareil : `LOGIN_SUCCESS`, `LOGIN_FAILED` (motif : identifiant inconnu / PIN erroné / compte désactivé, jamais renvoyé au client), `LOGIN_LOCKED`, `LOGOUT`, `SESSION_REVOKED` (jeton rejoué), `ACCESS_DENIED` (route d'un autre rôle). Aucun PIN n'est jamais journalisé.
+
+**Middlewares** (`server/src/middleware/`) : `rateLimiter.ts`, `validateZod.ts` (`validateBody`), `authenticateJWT.ts`, `requireRole.ts` (`requireRole`, `requireAuth`), `auditLogger.ts` (`auditLogger`, `auditEvent`).
+
+| Méthode | Route | Accès |
+| --- | --- | --- |
+| POST | `/api/auth/login` | public — `{ username, pin }` → `{ user }` + cookies ; réponse uniforme à durée constante |
+| POST | `/api/auth/refresh` | cookie de rafraîchissement — rotation, nouveau jeton d'accès |
+| GET | `/api/auth/me` | session en cours (reprise silencieuse si le jeton d'accès a expiré), sinon `{ user: null }` |
+| POST | `/api/auth/logout` | révoque la session, efface les cookies, coupe le temps réel |
+| POST | `/api/admin/users` | ADMIN — `{ name, username, role, pin? }` ; PIN renvoyé une seule fois |
+| PUT | `/api/admin/users/:id` | ADMIN — nom, identifiant, rôle, actif / inactif (révocation immédiate des sessions) |
+
+**Migration** — `20261010090000_zero_trust_auth` : identifiant dérivé du nom pour les comptes existants (ex. « Awa (serveuse) » → `awaserveuse`, modifiable par le gérant), table `AuthSession`, nouvelles actions d'audit.
+
+**Vérification** — `npm run test:auth -w server` (52 vérifications ; API démarrée, base de démo fraîche).
+
+## Application Android (Capacitor)
+
+Le dossier `client/android/` est un projet Android Studio prêt à compiler (Capacitor 8, application **RestoApp**, identifiant **`com.restoapp.pos`**, interface web `client/dist`). Plugins : `@capacitor/status-bar` (barre d'état sombre), `@capacitor/keyboard` (l'écran se redimensionne au-dessus du clavier virtuel), `@capacitor/screen-orientation` (**paysage imposé** pour la caisse et la cuisine, orientation libre ailleurs).
+
+**Principe** : l'APK charge l'interface depuis le serveur RestoApp du restaurant (`CAP_SERVER_URL`). Interface et API ont ainsi la même origine, condition pour des cookies `HttpOnly` + `SameSite=Strict`, et une mise à jour de l'interface sur le serveur arrive sur toutes les tablettes sans réinstaller l'APK. En production, le serveur Node sert lui-même l'interface compilée (`npm run build` puis `npm start -w server` : interface + API sur le port 4000).
+
+```bash
+# 1. Compiler l'interface et synchroniser le projet Android avec l'adresse du serveur
+CAP_SERVER_URL=http://192.168.1.10:4000 npm run cap:build -w client   # "vite build && npx cap sync"
+# 2. Ouvrir dans Android Studio (Build → Build APK(s))
+npm run cap:open -w client                                            # "npx cap open android"
+#    …ou en ligne de commande (JDK 21 + SDK Android installés) :
+cd client/android && ./gradlew assembleDebug   # → app/build/outputs/apk/debug/app-debug.apk
+```
+
+**Sans Android Studio** : le workflow GitHub Actions `.github/workflows/android-apk.yml` compile l'APK sur les serveurs de GitHub. Onglet **Actions → APK Android → Run workflow**, saisir l'adresse du serveur, puis télécharger `restoapp-debug-apk` dans les « Artifacts » de l'exécution. Il se lance aussi à chaque modification de `client/` (adresse : variable de dépôt `CAP_SERVER_URL`).
+
+**Réseau et sécurité Android**
+- `res/xml/network_security_config.xml` est **régénéré à chaque `cap sync`** (`scripts/android-network-config.mjs`) : HTTPS obligatoire partout, et HTTP en clair autorisé **uniquement vers l'hôte du serveur RestoApp** si `CAP_SERVER_URL` est en `http://` (serveur du réseau local). Recommandé : HTTPS (certificat sur le serveur ou proxy type Caddy), aucune exception n'est alors générée.
+- Serveur en `http://` sur le réseau local : mettre `COOKIE_SECURE=false` dans `server/.env` (Android refuse les cookies `Secure` hors HTTPS) et ajouter l'adresse à `CORS_ORIGIN`.
+- Pas de sauvegarde cloud des données de l'application (`allowBackup=false`, règles d'extraction Android 12+) ; débogage WebView désactivé sauf `CAP_DEBUG=true`.
+- APK compilé sans `CAP_SERVER_URL` : un écran explique comment recompiler avec l'adresse du serveur.
+- Pour publier : générer un APK / AAB **signé** (Android Studio → Build → Generate Signed Bundle / APK) avec une clé conservée hors du dépôt.
 

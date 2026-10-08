@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useAuth } from "../store/auth";
 import { currentLang } from "../i18n";
+import { refreshSession } from "./api";
 import type { NewOrderPayload, Order, OrderStatus, StaffAlert, Table } from "../types";
 
 interface ServerToClient {
@@ -47,8 +48,17 @@ export function getSocket(): AppSocket {
     transports: ["websocket", "polling"],
     auth: (cb) => cb({ lang: currentLang() }),
   });
-  socket.on("connect_error", (err) => {
-    if (err.message === "Session expirée") useAuth.getState().expire();
+  // Jeton d'accès expiré (15 min) au moment d'une reconnexion : rafraîchissement puis nouvel
+  // essai, une fois par minute au plus ; sinon retour à l'écran de connexion
+  let lastRetry = 0;
+  socket.on("connect_error", async (err) => {
+    if (err.message !== "Session expirée") return;
+    const { user, locked } = useAuth.getState();
+    if (user && !locked && Date.now() - lastRetry > 60_000) {
+      lastRetry = Date.now();
+      if (await refreshSession()) return void socket?.connect();
+    }
+    useAuth.getState().expire();
   });
   // Déconnexion forcée par le serveur (PIN réinitialisé, compte désactivé…) : on retente
   // une connexion ; si la session a été révoquée, connect_error ramène à l'écran de connexion.

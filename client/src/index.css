@@ -116,3 +116,8 @@ button {
     padding: 2mm 0 6mm;
   }
 }
+
+/* Application Android : barres fixées en bas d'écran masquées quand le clavier virtuel est ouvert */
+.keyboard-open .fixed.bottom-0 {
+  display: none;
+}

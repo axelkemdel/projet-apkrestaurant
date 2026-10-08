@@ -108,7 +108,9 @@ export async function printQrSheet(
   .zone { font-size: 8pt; color: #94a3b8; margin-top: 1mm; }
   @media screen { body { background: #f1f5f9; } .sheet { max-width: 190mm; margin: 10mm auto; } .card { background: #fff; } }
 </style></head><body><main class="sheet">${body}</main>
-<script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 150); });</script>
 </body></html>`);
   win.document.close();
+  // Impression déclenchée depuis cette page : pas de script en ligne (bloqué par la CSP de l'interface)
+  win.focus();
+  setTimeout(() => win.print(), 300);
 }

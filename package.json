@@ -1,12 +1,18 @@
 {
   "name": "restoapp",
   "private": true,
-  "workspaces": ["server", "client"],
+  "workspaces": [
+    "server",
+    "client"
+  ],
   "scripts": {
     "dev": "npm run dev -w server & npm run dev -w client & wait",
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",
     "build": "npm run build -w server && npm run build -w client",
-    "db:setup": "npm run db:migrate -w server && npm run db:seed -w server"
+    "db:setup": "npm run db:migrate -w server && npm run db:seed -w server",
+    "cap:build": "npm run cap:build -w client",
+    "cap:open": "npm run cap:open -w client",
+    "apk:debug": "npm run apk:debug -w client"
   }
 }

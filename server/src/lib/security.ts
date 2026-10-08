@@ -1,16 +1,11 @@
-import type { Express, Request, RequestHandler, Response, Router } from "express";
+import type { Express, RequestHandler, Router } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
-import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import { z } from "zod";
+import { apiLimiter } from "../middleware/rateLimiter.js";
 import { env } from "./env.js";
 import { HttpError } from "./errors.js";
-import { langOf, translate, type MessageKey } from "./i18n.js";
-
-function sendError(req: Request, res: Response, status: number, code: MessageKey) {
-  res.status(status).json({ code, error: translate(langOf(req), code) });
-}
 
 /** Origine autorisée : liste CORS_ORIGIN, ou même hôte que le serveur (accès direct / proxy). */
 export function isAllowedOrigin(origin: string, host: string | undefined, forwardedHost?: string | string[]) {
@@ -58,51 +53,9 @@ export function applySecurity(app: Express) {
     }),
   );
   app.use(cookieParser());
-  // Garde-fou global contre l'abus (toutes les tablettes d'un restaurant partagent souvent une IP)
-  app.use(
-    "/api",
-    rateLimit({
-      windowMs: 60_000,
-      limit: 600,
-      standardHeaders: "draft-8",
-      legacyHeaders: false,
-      handler: (req, res, _next, options) => sendError(req, res, options.statusCode, "http.tooManyRequests"),
-    }),
-  );
+  // Garde-fou global contre l'abus (voir middleware/rateLimiter.ts)
+  app.use("/api", apiLimiter);
   app.use("/api", originCheck);
-}
-
-// ---------------------------------------------------------------------------
-// Anti force brute sur le code PIN
-// ---------------------------------------------------------------------------
-
-/** Clé par profil : 5 PIN erronés sur un même employé → profil bloqué 5 min, quelle que soit la tablette. */
-export const pinKey = (userId: string) => `pin:${userId}`;
-
-export function createLoginLimiters(onLocked: (userId: string, ip: string | null) => void) {
-  const perProfile = rateLimit({
-    windowMs: 5 * 60_000,
-    limit: 5,
-    skipSuccessfulRequests: true,
-    standardHeaders: "draft-8",
-    legacyHeaders: false,
-    keyGenerator: (req) => pinKey(String(req.body?.userId ?? "").slice(0, 64)),
-    handler: (req, res, _next, options) => {
-      onLocked(String(req.body?.userId ?? ""), req.ip ?? null);
-      sendError(req, res, options.statusCode, "auth.tooManyPinProfile");
-    },
-  });
-  // Par appareil (IP) : empêche d'essayer quelques PIN sur chacun des profils
-  const perIp = rateLimit({
-    windowMs: 5 * 60_000,
-    limit: 30,
-    skipSuccessfulRequests: true,
-    standardHeaders: "draft-8",
-    legacyHeaders: false,
-    keyGenerator: (req) => ipKeyGenerator(req.ip ?? "unknown"),
-    handler: (req, res, _next, options) => sendError(req, res, options.statusCode, "auth.tooManyPinDevice"),
-  });
-  return { perProfile, perIp };
 }
 
 // ---------------------------------------------------------------------------

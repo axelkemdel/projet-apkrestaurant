@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Lock } from "lucide-react";
 import { useAuth } from "../store/auth";
-import { IDLE_LOCK_MINUTES, lockSession, loginWithPin, logout } from "../lib/session";
+import { IDLE_LOCK_MINUTES, lockSession, loginWithCredentials, logout } from "../lib/session";
 import { PinPad } from "./PinPad";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { useTranslation } from "react-i18next";
@@ -60,25 +60,28 @@ export function IdleLock() {
           </motion.div>
         )}
       </AnimatePresence>
-      <AnimatePresence>{locked && user && <LockScreen name={user.name} userId={user.id} />}</AnimatePresence>
+      <AnimatePresence>{locked && user && <LockScreen name={user.name} username={user.username} />}</AnimatePresence>
     </>
   );
 }
 
-function LockScreen({ name, userId }: { name: string; userId: string }) {
+/** Reprise après verrouillage : la session a été révoquée, une nouvelle connexion (même employé) est exigée. */
+function LockScreen({ name, username }: { name: string; username: string }) {
   const { t } = useTranslation();
+  const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [shuffleKey, setShuffleKey] = useState(0);
 
-  async function unlock(pin: string) {
+  async function unlock() {
     setLoading(true);
     setError(null);
     try {
-      await loginWithPin(userId, pin);
-      return true;
+      await loginWithCredentials(username, pin);
     } catch (e) {
       setError((e as Error).message);
-      return false;
+      setPin("");
+      setShuffleKey((k) => k + 1);
     } finally {
       setLoading(false);
     }
@@ -101,7 +104,7 @@ function LockScreen({ name, userId }: { name: string; userId: string }) {
         </span>
         <h2 className="text-xl font-bold text-white">{t("lock.title")}</h2>
         <p className="mb-6 mt-1 text-slate-400">{t("lock.prompt", { name })}</p>
-        <PinPad onSubmit={unlock} loading={loading} />
+        <PinPad value={pin} onChange={setPin} onSubmit={() => void unlock()} loading={loading} shuffle shuffleKey={shuffleKey} />
         {error && (
           <p className="mt-4 text-sm font-medium text-red-400" role="alert">
             {error}

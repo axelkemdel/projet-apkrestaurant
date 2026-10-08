@@ -11,11 +11,9 @@
  */
 import { io } from "socket.io-client";
 const API = "http://localhost:4000/api";
-const users = await fetch(`${API}/auth/users`).then(r => r.json());
-const uid = n => users.find(u => u.name.startsWith(n)).id;
 async function loginRaw(n, pin, extra = {}) {
-  const r = await fetch(`${API}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: uid(n), pin, ...extra }) });
-  return { r, body: await r.json().catch(() => ({})), cookie: (r.headers.get("set-cookie") ?? "").split(";")[0] };
+  const r = await fetch(`${API}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: n.toLowerCase(), pin, ...extra }) });
+  return { r, body: await r.json().catch(() => ({})), cookie: r.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ") };
 }
 async function login(n, pin) { const { cookie } = await loginRaw(n, pin); if (!cookie) throw new Error("login failed " + n); return cookie; }
 async function call(cookie, path, body, method, headers = {}) {

@@ -32,6 +32,30 @@ enum OrderStatus {
   CANCELLED
 }
 
+// Session d'un appareil : porte le jeton de rafraîchissement (cookie HttpOnly limité à
+// /api/auth). Seule son empreinte SHA-256 est stockée ; il change à chaque
+// rafraîchissement (rotation) et la réutilisation d'un ancien jeton révoque la session.
+model AuthSession {
+  id            String    @id @default(cuid())
+  userId        String
+  tokenHash     String
+  // Empreinte du jeton précédent : tolérance de quelques secondes pour deux requêtes simultanées
+  previousHash  String?
+  rotatedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  lastUsedAt    DateTime  @default(now())
+  expiresAt     DateTime // limite absolue (un service)
+  revokedAt     DateTime?
+  revokedReason String?
+  ipAddress     String?
+  userAgent     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 // Origine d'un bon : saisi par le personnel, ou commandé par le client via le QR code de sa table
 enum OrderSource {
   STAFF
@@ -65,12 +89,18 @@ enum PaymentMode {
 model User {
   id             String   @id @default(cuid())
   name           String
+  // Identifiant de connexion (code employé), saisi sur l'écran de connexion : aucune
+  // liste de comptes n'est exposée avant authentification
+  username       String   @unique
   role           Role
   pinHash        String
   isActive       Boolean  @default(true)
   // Incrémenté à chaque changement de PIN / rôle / désactivation : invalide les sessions ouvertes
   sessionVersion Int      @default(0)
+  lastLoginAt    DateTime?
   createdAt      DateTime @default(now())
+
+  sessions AuthSession[]
 
   orders    Order[]
   payments  Payment[]
@@ -281,6 +311,11 @@ enum AuditAction {
   USER_STATUS_CHANGED
   LOGIN_LOCKED
   TABLE_QR_REGENERATED
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  SESSION_REVOKED
+  ACCESS_DENIED
 }
 
 // Journal anti-fraude, en AJOUT SEUL : un trigger PostgreSQL refuse UPDATE et DELETE

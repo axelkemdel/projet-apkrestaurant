@@ -2,6 +2,7 @@
 // exister dans en.ts : le type `Translation` le vérifie à la compilation.
 export const fr = {
   admin: {
+    shortUsers: "Équipe",
     shortTables: "Tables",
     tabTables: "Plan de salle & QR",
     collapse: "Replier",
@@ -147,6 +148,11 @@ export const fr = {
   },
   audit: {
     actions: {
+      ACCESS_DENIED: "Accès refusé (rôle)",
+      LOGIN_FAILED: "Connexion échouée",
+      LOGIN_SUCCESS: "Connexion réussie",
+      LOGOUT: "Déconnexion",
+      SESSION_REVOKED: "Session révoquée",
       TABLE_QR_REGENERATED: "QR code de table régénéré",
       DISCOUNT_APPLIED: "Remise",
       LOGIN_LOCKED: "Profil verrouillé (PIN)",
@@ -163,6 +169,11 @@ export const fr = {
     by: "Par {{name}} ({{role}})",
     byUnknown: "Par un appareil non identifié",
     desc: {
+      accessDenied: "{{role}} a tenté d'ouvrir {{method}} {{path}}",
+      loginFailed: "Identifiant « {{username}} » : {{reason}}{{device}}",
+      loginSuccess: "{{username}} connecté{{device}}",
+      logout: "Session fermée",
+      sessionRevoked: "Ancien jeton de session rejoué : session révoquée (vol de cookie possible)",
       qrRegenerated: "Table {{table}} : l'ancien QR code ne fonctionne plus",
       discount: "{{value}} = {{amount}} sur {{total}}{{table}} — « {{reason}} » (cumul {{pct}} %)",
       itemCreated: "{{name}} à {{price}}",
@@ -176,6 +187,11 @@ export const fr = {
       userCreated: "{{name}} — {{role}}",
       userDeactivated: "{{name}} désactivé",
       userReactivated: "{{name}} réactivé",
+    },
+    reasons: {
+      BAD_PIN: "code PIN erroné",
+      INACTIVE: "compte désactivé",
+      UNKNOWN_USER: "identifiant inconnu",
     },
     empty: "Aucune action enregistrée pour ces critères",
     filterAction: "Filtrer par type d'action",
@@ -335,9 +351,16 @@ export const fr = {
     warning: "Verrouillage dans {{seconds}} s — touchez l'écran pour continuer",
   },
   login: {
-    changeProfile: "← Changer de profil",
-    hello: "Bonjour {{name}}, entrez votre code",
-    whoAreYou: "Qui êtes-vous ?",
+    closedRegistration: "Inscription fermée : les comptes sont créés par le gérant.",
+    forgot: "Code oublié ? Adressez-vous au gérant.",
+    pin: "Code PIN",
+    secure: "Connexion chiffrée · verrouillage après 5 min d'inactivité",
+    shuffle: "Clavier mélangé",
+    shuffleHint: "Les touches changent de place à chaque essai, contre les regards indiscrets",
+    subtitle: "Identifiant et code PIN fournis par votre gérant",
+    title: "Connexion sécurisée",
+    username: "Identifiant",
+    usernamePlaceholder: "ex. awa",
   },
   menuAdmin: {
     add: "Ajouter",
@@ -382,6 +405,10 @@ export const fr = {
     floorLong: "Salle (serveurs)",
     kitchen: "Cuisine",
     kitchenLong: "Cuisine & Bar",
+  },
+  native: {
+    notConfiguredText: "Cette application n'a pas été compilée avec l'adresse du serveur RestoApp du restaurant. Recompilez l'APK en indiquant cette adresse :",
+    notConfiguredTitle: "Serveur non configuré",
   },
   order: {
     addFor: "Ajouter · {{price}}",
@@ -497,6 +524,11 @@ export const fr = {
     SERVEUR: "Serveur",
   },
   staff: {
+    colUsername: "Identifiant",
+    lastLogin: "Dernière connexion : {{date}}",
+    neverLoggedIn: "Jamais connecté",
+    username: "Identifiant de connexion",
+    usernameHint: "3 à 32 caractères : lettres minuscules, chiffres, point, tiret. Saisi par l'employé sur l'écran de connexion.",
     active: "Actif",
     colName: "Nom",
     colPin: "Code PIN",

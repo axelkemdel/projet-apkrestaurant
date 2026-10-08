@@ -1,0 +1,58 @@
+# Compile l'APK Android de RestoApp sur les serveurs de GitHub (SDK Android préinstallé) :
+# aucun Android Studio nécessaire. L'APK est téléchargeable dans l'onglet « Actions »,
+# rubrique « Artifacts » de l'exécution.
+#
+# Adresse du serveur encodée dans l'APK : champ « server_url » au lancement manuel, sinon
+# la variable de dépôt CAP_SERVER_URL (Settings → Secrets and variables → Actions → Variables).
+name: APK Android
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_url:
+        description: "Adresse du serveur RestoApp (ex. http://192.168.1.10:4000 ou https://resto.example.com)"
+        required: false
+  push:
+    paths:
+      - "client/**"
+      - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Interface web + synchronisation Capacitor
+        env:
+          # Passée par variable d'environnement (jamais interpolée dans le script shell)
+          CAP_SERVER_URL: ${{ inputs.server_url || vars.CAP_SERVER_URL }}
+        run: npm run cap:build -w client
+
+      - name: Compilation de l'APK (debug)
+        working-directory: client/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: restoapp-debug-apk
+          path: client/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+          if-no-files-found: error

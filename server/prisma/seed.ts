@@ -3,12 +3,13 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-const users: { name: string; role: Role; pin: string }[] = [
-  { name: "Admin", role: "ADMIN", pin: "0000" },
-  { name: "Awa (serveuse)", role: "SERVEUR", pin: "1111" },
-  { name: "Issa (serveur)", role: "SERVEUR", pin: "2222" },
-  { name: "Cuisine", role: "CUISINE", pin: "3333" },
-  { name: "Caisse", role: "CAISSE", pin: "4444" },
+// Comptes de démonstration : identifiant + PIN (à changer avant toute mise en service)
+const users: { name: string; username: string; role: Role; pin: string }[] = [
+  { name: "Admin", username: "admin", role: "ADMIN", pin: "0000" },
+  { name: "Awa (serveuse)", username: "awa", role: "SERVEUR", pin: "1111" },
+  { name: "Issa (serveur)", username: "issa", role: "SERVEUR", pin: "2222" },
+  { name: "Cuisine", username: "cuisine", role: "CUISINE", pin: "3333" },
+  { name: "Caisse", username: "caisse", role: "CAISSE", pin: "4444" },
 ];
 
 type L = { fr: string; en: string };
@@ -106,6 +107,7 @@ async function main() {
   await prisma.$executeRawUnsafe('TRUNCATE "AuditLog"');
   // Ordre de suppression compatible avec les clés étrangères
   await prisma.review.deleteMany();
+  await prisma.authSession.deleteMany();
   await prisma.discount.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.orderItem.deleteMany();
@@ -117,7 +119,7 @@ async function main() {
 
   for (const u of users) {
     await prisma.user.create({
-      data: { name: u.name, role: u.role, pinHash: await bcrypt.hash(u.pin, 10) },
+      data: { name: u.name, username: u.username, role: u.role, pinHash: await bcrypt.hash(u.pin, 12) },
     });
   }
 

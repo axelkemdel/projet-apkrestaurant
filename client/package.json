@@ -7,9 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b",
+    "cap:build": "vite build && npx cap sync",
+    "cap:open": "npx cap open android",
+    "cap:sync": "npx cap sync android",
+    "apk:debug": "npm run cap:build && cd android && ./gradlew assembleDebug",
+    "capacitor:sync:after": "node scripts/android-network-config.mjs"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@tailwindcss/vite": "^4.3.3",
     "@types/qrcode": "^1.5.5",
     "@types/react": "^19.3.0",
@@ -20,6 +26,11 @@
     "vite": "^8.3.3"
   },
   "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/keyboard": "8.0.5",
+    "@capacitor/screen-orientation": "8.0.1",
+    "@capacitor/status-bar": "8.0.3",
     "framer-motion": "^14.0.0",
     "i18next": "^26.4.2",
     "lucide-react": "^1.53.0",

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { NavLink } from "react-router-dom";
+import { Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
 import { BarChart3, BookOpen, ChefHat, ChevronsLeft, ChevronsRight, LayoutGrid, QrCode, ScrollText, Users, UtensilsCrossed, Wallet } from "lucide-react";
 import { AppHeader } from "../components/AppHeader";
 import { useTranslation } from "react-i18next";
@@ -12,28 +12,20 @@ import { AuditTab } from "../components/admin/AuditTab";
 import { TablesTab } from "../components/admin/TablesTab";
 
 const TABS = [
-  { id: "stats", label: "admin.tabStats", short: "admin.shortStats", Icon: BarChart3 },
-  { id: "menu", label: "admin.tabMenu", short: "admin.shortMenu", Icon: BookOpen },
-  { id: "tables", label: "admin.tabTables", short: "admin.shortTables", Icon: QrCode },
-  { id: "staff", label: "admin.tabStaff", short: "admin.shortStaff", Icon: Users },
-  { id: "audit", label: "admin.tabAudit", short: "admin.shortAudit", Icon: ScrollText },
+  // `path` : adresse de l'onglet (/admin/dashboard, /admin/users…)
+  { id: "stats", path: "dashboard", label: "admin.tabStats", short: "admin.shortStats", Icon: BarChart3 },
+  { id: "menu", path: "menu", label: "admin.tabMenu", short: "admin.shortMenu", Icon: BookOpen },
+  { id: "tables", path: "tables", label: "admin.tabTables", short: "admin.shortTables", Icon: QrCode },
+  { id: "staff", path: "users", label: "admin.tabStaff", short: "admin.shortStaff", Icon: Users },
+  { id: "audit", path: "audit", label: "admin.tabAudit", short: "admin.shortAudit", Icon: ScrollText },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 
 const VIEWS: { to: string; label: "nav.floorLong" | "nav.kitchenLong" | "nav.cashier"; Icon: typeof Wallet }[] = [
-  { to: "/serveur", label: "nav.floorLong", Icon: UtensilsCrossed },
-  { to: "/cuisine", label: "nav.kitchenLong", Icon: ChefHat },
-  { to: "/caisse", label: "nav.cashier", Icon: Wallet },
+  { to: "/pos/tables", label: "nav.floorLong", Icon: UtensilsCrossed },
+  { to: "/kds/kitchen", label: "nav.kitchenLong", Icon: ChefHat },
+  { to: "/cashier/checkout", label: "nav.cashier", Icon: Wallet },
 ];
-
-function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
-  try {
-    const v = sessionStorage.getItem(key) ?? localStorage.getItem(key);
-    return allowed.includes(v as T) ? (v as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 /** Barre latérale dépliée par défaut sur grand écran (> 1024 px), repliée sur tablette. */
 function defaultCollapsed() {
@@ -55,17 +47,14 @@ function defaultCollapsed() {
  */
 export function AdminView() {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<TabId>(() => readPref("admin-tab", TABS.map((t) => t.id), "stats"));
+  // L'onglet actif est porté par l'adresse : /admin/dashboard, /admin/menu, /admin/users…
+  const { section } = useParams();
+  const navigate = useNavigate();
+  const current = TABS.find((x) => x.path === section);
+  const tab: TabId = current?.id ?? "stats";
+  const setTab = (id: TabId) => navigate(`/admin/${TABS.find((x) => x.id === id)!.path}`);
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [viewsOpen, setViewsOpen] = useState(false);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem("admin-tab", tab);
-    } catch {
-      /* préférence non mémorisée */
-    }
-  }, [tab]);
 
   function toggleSidebar() {
     setCollapsed((c) => {
@@ -78,11 +67,12 @@ export function AdminView() {
     });
   }
 
-  const current = TABS.find((t) => t.id === tab)!;
+
+  if (!current) return <Navigate to="/admin/dashboard" replace />;
 
   return (
     <div className="flex h-full flex-col">
-      <AppHeader title={t(current.label)} hideNav />
+      <AppHeader title={t((current ?? TABS[0]).label)} hideNav />
       <div className="flex min-h-0 flex-1">
         {/* Barre latérale : tablette et plus */}
         <motion.aside

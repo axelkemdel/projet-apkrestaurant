@@ -19,11 +19,9 @@ import "dotenv/config";
 
 const FIXTURE = fileURLToPath(new URL("./fixture-dish.png", import.meta.url));
 const API = "http://localhost:4000/api";
-const users = await fetch(`${API}/auth/users`).then(r => r.json());
-const uid = n => users.find(u => u.name.startsWith(n)).id;
 async function loginRaw(n, pin, extra = {}) {
-  const r = await fetch(`${API}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ userId: uid(n), pin, ...extra }) });
-  return { r, body: await r.json().catch(() => ({})), cookie: (r.headers.get("set-cookie") ?? "").split(";")[0] };
+  const r = await fetch(`${API}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: n.toLowerCase(), pin, ...extra }) });
+  return { r, body: await r.json().catch(() => ({})), cookie: r.headers.getSetCookie().map((c) => c.split(";")[0]).join("; ") };
 }
 async function login(n, pin) { const { cookie } = await loginRaw(n, pin); if (!cookie) throw new Error("login failed " + n); return cookie; }
 async function call(cookie, path, body, method, headers = {}) {
@@ -36,10 +34,13 @@ async function call(cookie, path, body, method, headers = {}) {
 let failures = 0;
 const ok = (c, m) => { if (!c) failures++; console.log(c ? "✔" : "✘", m); };
 const L = await loginRaw("Admin", "0000");
-const sc = L.r.headers.get("set-cookie");
-ok(/HttpOnly/i.test(sc) && /SameSite=Strict/i.test(sc) && /Secure/i.test(sc), "cookie HttpOnly+SameSite=Strict+Secure");
+const sc = L.r.headers.getSetCookie();
+ok(sc.length === 2 && sc.every((c) => /HttpOnly/i.test(c) && /SameSite=Strict/i.test(c) && /Secure/i.test(c)), "cookies (accès + rafraîchissement) HttpOnly+SameSite=Strict+Secure");
 ok(!("token" in L.body), "aucun jeton dans le corps JSON");
-const A = L.cookie, W = await login("Awa", "1111"), K = await login("Cuisine", "3333"), C = await login("Caisse", "4444");
+const A = L.cookie;
+const staff = await call(A, "/admin/users");
+const uid = (n) => staff.find((u) => u.name.startsWith(n)).id;
+const W = await login("Awa", "1111"), K = await login("Cuisine", "3333"), C = await login("Caisse", "4444");
 ok((await call(null, "/tables", null, "GET", { authorization: "Bearer x" })).s === 401, "Bearer refusé, cookie requis");
 ok((await call(A, "/auth/me")).user?.role === "ADMIN", "/me via cookie");
 const h = (await call(A, "/auth/me"))._h;
@@ -111,15 +112,19 @@ const prisma = new PrismaClient();
 try { await prisma.$executeRawUnsafe('DELETE FROM "AuditLog"'); ok(false, "DELETE autorisé ?!"); }
 catch (e) { ok(/ajout seul/.test(String(e.message)), "trigger : DELETE sur AuditLog refusé en base"); }
 finally { await prisma.$disconnect(); }
-// Inactivité : jeton signé il y a 31 min
-const secret = process.env.JWT_SECRET;
-const now = Math.floor(Date.now() / 1000);
-const stale = jwt.sign({ id: uid("Caisse"), sv: 0, abs: Date.now() - 40 * 60_000, iat: now - 31 * 60 }, secret);
-ok((await call(`restoapp_session=${stale}`, "/admin/stats/daily")).error === "Session expirée après inactivité" && (await call(`restoapp_session=${stale}`, "/auth/me")).user === null, "session expirée après 30 min d'inactivité");
-const staleK = jwt.sign({ id: uid("Cuisine"), sv: 0, abs: Date.now() - 40 * 60_000, iat: now - 31 * 60 }, secret);
-ok((await call(`restoapp_session=${staleK}`, "/auth/me")).user?.role === "CUISINE", "écran cuisine exempté (affichage permanent)");
+// Inactivité : dernière activité de la session repoussée de 31 min en base
+const sidOf = (cookie) => jwt.decode(cookie.match(/restoapp_at=([^;]+)/)[1]).sid;
+const C2 = await login("Caisse", "4444"), K2 = await login("Cuisine", "3333");
+const db = new PrismaClient();
+const past = new Date(Date.now() - 31 * 60_000);
+await db.authSession.updateMany({ where: { id: { in: [sidOf(C2), sidOf(K2)] } }, data: { lastUsedAt: past } });
+await db.$disconnect();
+ok((await call(C2, "/admin/stats/daily")).error === "Session expirée après inactivité" && (await call(C2, "/auth/me")).user === null, "session expirée après 30 min d'inactivité");
+ok((await call(K2, "/auth/me")).user?.role === "CUISINE", "écran cuisine exempté (affichage permanent)");
 const logout = await fetch(`${API}/auth/logout`, { method: "POST", headers: { cookie: C } });
-ok(/restoapp_session=;/.test(logout.headers.get("set-cookie")), "déconnexion : cookie effacé");
+const cleared = logout.headers.getSetCookie().join(" ");
+ok(/restoapp_at=;/.test(cleared) && /restoapp_rt=;/.test(cleared), "déconnexion : cookies effacés");
+ok((await call(C, "/checkout/overview")).s === 401, "déconnexion : jeton d'accès révoqué côté serveur");
 ks.close();
 
 console.log(failures ? `\n${failures} échec(s)` : "\nToutes les vérifications de sécurité sont passées.");

@@ -20,6 +20,8 @@ export interface Label {
 export interface User {
   id: string;
   name: string;
+  /** Identifiant de connexion (code employé) */
+  username: string;
   role: Role;
 }
 
@@ -295,8 +297,10 @@ export interface AdminCategory extends Omit<Category, "items"> {
 export interface StaffUser {
   id: string;
   name: string;
+  username: string;
   role: Role;
   isActive: boolean;
+  lastLoginAt: string | null;
   createdAt: string;
 }
 
@@ -311,7 +315,12 @@ export type AuditAction =
   | "USER_ROLE_CHANGED"
   | "USER_STATUS_CHANGED"
   | "LOGIN_LOCKED"
-  | "TABLE_QR_REGENERATED";
+  | "TABLE_QR_REGENERATED"
+  | "LOGIN_SUCCESS"
+  | "LOGIN_FAILED"
+  | "LOGOUT"
+  | "SESSION_REVOKED"
+  | "ACCESS_DENIED";
 
 export interface AuditLogEntry {
   id: string;
