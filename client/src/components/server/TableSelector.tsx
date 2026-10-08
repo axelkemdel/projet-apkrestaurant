@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Loader2, ShoppingBag, Users } from "lucide-react";
+import { BellRing, Check, Loader2, ReceiptText, ShoppingBag, Users } from "lucide-react";
+import { toast } from "../Toasts";
+import { formatTime } from "../../lib/format";
 import { api } from "../../lib/api";
 import { getSocket } from "../../lib/socket";
 import type { Table, TableStatus } from "../../types";
@@ -29,15 +31,24 @@ export function TableSelector({ onSelect, onTakeaway }: { onSelect: (t: Table) =
     void load();
     // Le nombre de bons ouverts change aussi : on recharge à chaque mise à jour d'une table / nouveau bon
     const socket = getSocket();
-    socket.on("table_updated", load);
-    socket.on("new_order", load);
-    socket.on("connect", load);
-    return () => {
-      socket.off("table_updated", load);
-      socket.off("new_order", load);
-      socket.off("connect", load);
-    };
+    // Demandes des clients (QR) : alerte visible sur la table jusqu'à sa prise en compte
+    const events = ["table_updated", "new_order", "connect", "server_alert", "request_bill", "table_alert_cleared"] as const;
+    events.forEach((e) => socket.on(e, load));
+    return () => events.forEach((e) => socket.off(e, load));
   }, []);
+
+  async function acknowledge(tb: Table, kind: "CALL" | "BILL") {
+    try {
+      await api(`/tables/${tb.id}/requests/clear`, { method: "POST", body: JSON.stringify({ kind }) });
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  const requests = (tables ?? []).flatMap((tb) => [
+    ...(tb.callRequestedAt ? [{ tb, kind: "CALL" as const, at: tb.callRequestedAt }] : []),
+    ...(tb.billRequestedAt ? [{ tb, kind: "BILL" as const, at: tb.billRequestedAt }] : []),
+  ]).sort((a, b) => a.at.localeCompare(b.at));
 
   const zones = useMemo(() => [ALL_ZONES, ...new Set(tables?.map((tb) => tb.zone))], [tables]);
   const visible = tables?.filter((tb) => zone === ALL_ZONES || tb.zone === zone) ?? [];
@@ -74,6 +85,31 @@ export function TableSelector({ onSelect, onTakeaway }: { onSelect: (t: Table) =
         </div>
       </div>
 
+      {requests.length > 0 && (
+        <section className="mb-4 rounded-2xl bg-white p-3 shadow-sm ring-2 ring-red-200" aria-live="polite">
+          <h2 className="mb-2 flex items-center gap-2 text-sm font-bold text-red-700">
+            <BellRing size={16} className="animate-pulse" /> {t("alerts.requestsTitle")}
+          </h2>
+          <ul className="grid gap-2 sm:grid-cols-2">
+            {requests.map(({ tb, kind, at }) => (
+              <li key={`${tb.id}-${kind}`} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${kind === "CALL" ? "bg-red-50" : "bg-violet-50"}`}>
+                {kind === "CALL" ? <BellRing size={18} className="text-red-600" /> : <ReceiptText size={18} className="text-violet-600" />}
+                <span className="min-w-0 flex-1 text-sm font-semibold">
+                  {t(kind === "CALL" ? "alerts.call" : "alerts.bill", { number: tb.number })}
+                  <span className="block text-xs font-normal text-slate-500">{formatTime(at)}</span>
+                </span>
+                <button
+                  onClick={() => void acknowledge(tb, kind)}
+                  className="flex min-h-11 items-center gap-1 rounded-lg bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm"
+                >
+                  <Check size={16} /> {t("alerts.ack")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
         <motion.button
           whileTap={{ scale: 0.95 }}
@@ -94,6 +130,20 @@ export function TableSelector({ onSelect, onTakeaway }: { onSelect: (t: Table) =
               className={`relative flex aspect-square flex-col items-center justify-center rounded-2xl border-2 transition-colors ${s.card}`}
             >
               <span className={`absolute right-2 top-2 h-2.5 w-2.5 rounded-full ${s.dot}`} />
+              {(tb.callRequestedAt || tb.billRequestedAt) && (
+                <span className="absolute left-2 top-2 flex gap-1">
+                  {tb.callRequestedAt && (
+                    <span className="flex h-6 w-6 animate-pulse items-center justify-center rounded-full bg-red-600 text-white" aria-label={t("alerts.callBadge")}>
+                      <BellRing size={13} />
+                    </span>
+                  )}
+                  {tb.billRequestedAt && (
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-white" aria-label={t("alerts.billBadge")}>
+                      <ReceiptText size={13} />
+                    </span>
+                  )}
+                </span>
+              )}
               <span className="text-3xl font-bold">{tb.number}</span>
               <span className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                 <Users size={12} /> {tb.capacity}

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { restoreSession } from "./lib/session";
 import { IdleLock } from "./components/IdleLock";
@@ -9,6 +9,7 @@ import { ServerView } from "./pages/ServerView";
 import { KitchenView } from "./pages/KitchenView";
 import { CashierView } from "./pages/CashierView";
 import { AdminView } from "./pages/AdminView";
+import { CustomerTableDashboard } from "./pages/CustomerTableDashboard";
 import { Toaster } from "./components/Toasts";
 import type { Role } from "./types";
 
@@ -30,11 +31,24 @@ function Guard({ roles, children }: { roles: Role[]; children: React.ReactNode }
 export function App() {
   const user = useAuth((s) => s.user);
   const status = useAuth((s) => s.status);
+  // Portail client (QR code) : public, sans session ni verrouillage d'écran
+  const isGuest = useLocation().pathname.startsWith("/qr/");
 
   // Au chargement : la session éventuelle est portée par le cookie HttpOnly, on la vérifie auprès du serveur
   useEffect(() => {
-    void restoreSession();
-  }, []);
+    if (!isGuest) void restoreSession();
+  }, [isGuest]);
+
+  if (isGuest) {
+    return (
+      <>
+        <Routes>
+          <Route path="/qr/:token" element={<CustomerTableDashboard />} />
+        </Routes>
+        <Toaster />
+      </>
+    );
+  }
 
   if (status === "checking") {
     return (

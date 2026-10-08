@@ -4,6 +4,8 @@ export type Role = "ADMIN" | "SERVEUR" | "CUISINE" | "CAISSE";
 export type TableStatus = "FREE" | "OCCUPIED" | "RESERVED";
 export type OrderStatus = "PENDING" | "PREPARING" | "READY" | "SERVED" | "PAID" | "CANCELLED";
 export type OrderType = "DINE_IN" | "TAKEAWAY" | "DELIVERY";
+/** STAFF : saisi par le personnel ; CUSTOMER : commandé par le client via le QR code de sa table */
+export type OrderSource = "STAFF" | "CUSTOMER";
 export type Station = "KITCHEN" | "BAR";
 export type Lang = "fr" | "en";
 /** Langue de prise de commande, telle que stockée côté serveur */
@@ -28,6 +30,9 @@ export interface Table {
   zone: string;
   status: TableStatus;
   openOrders: number;
+  /** Demandes du client en attente (QR code) */
+  callRequestedAt: string | null;
+  billRequestedAt: string | null;
 }
 
 export interface Extra extends Label {
@@ -108,7 +113,9 @@ export interface Order {
   startedAt: string | null;
   readyAt: string | null;
   table: { id: string; number: number; zone: string } | null;
-  server: { id: string; name: string };
+  /** null : commande passée par le client (QR code) */
+  server: { id: string; name: string } | null;
+  source: OrderSource;
   items: OrderItem[];
 }
 
@@ -148,7 +155,7 @@ export interface BillSummary {
 
 export interface CheckoutOverview {
   tables: (Omit<Table, "openOrders"> & { bill: BillSummary })[];
-  takeaway: { id: string; number: number; type: OrderType; status: OrderStatus; server: string; bill: BillSummary }[];
+  takeaway: { id: string; number: number; type: OrderType; status: OrderStatus; server: string | null; bill: BillSummary }[];
 }
 
 export interface BillOrderItem extends OrderItem {
@@ -303,7 +310,8 @@ export type AuditAction =
   | "USER_CREATED"
   | "USER_ROLE_CHANGED"
   | "USER_STATUS_CHANGED"
-  | "LOGIN_LOCKED";
+  | "LOGIN_LOCKED"
+  | "TABLE_QR_REGENERATED";
 
 export interface AuditLogEntry {
   id: string;
@@ -312,4 +320,67 @@ export interface AuditLogEntry {
   timestamp: string;
   ipAddress: string | null;
   user: { id: string; name: string; role: Role } | null;
+}
+
+/** Table vue par le gérant (plan de salle & QR codes). */
+export interface AdminTable {
+  id: string;
+  number: number;
+  capacity: number;
+  zone: string;
+  status: TableStatus;
+  qrToken: string;
+  callRequestedAt: string | null;
+  billRequestedAt: string | null;
+  deletable: boolean;
+}
+
+export interface ReviewsSummary {
+  count: number;
+  average: number | null;
+  distribution: { rating: number; count: number }[];
+  items: { id: string; rating: number; comment: string | null; language: OrderLanguage; createdAt: string; table: number; order: number | null }[];
+}
+
+/** Alerte d'un client (QR) relayée aux tablettes : appel serveur ou demande d'addition. */
+export interface StaffAlert {
+  tableId: string;
+  number: number;
+  kind: "CALL" | "BILL";
+  requestedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Portail client (QR code)
+// ---------------------------------------------------------------------------
+
+export interface PublicOrder {
+  id: string;
+  number: number;
+  status: OrderStatus;
+  source: OrderSource;
+  totalAmount: number;
+  createdAt: string;
+  startedAt: string | null;
+  readyAt: string | null;
+  servedAt: string | null;
+  items: Pick<OrderItem, "id" | "nameFr" | "nameEn" | "quantity" | "unitPrice" | "modifiers" | "quickNotes" | "notes">[];
+}
+
+export interface PublicTable {
+  number: number;
+  zone: string;
+  status: TableStatus;
+  callRequestedAt: string | null;
+  billRequestedAt: string | null;
+}
+
+export interface Portal {
+  restaurant: { name: string; currency: string };
+  /** false : carte consultable, commande en ligne désactivée par le restaurant */
+  ordering: boolean;
+  table: PublicTable;
+  menu: Category[];
+  orders: PublicOrder[];
+  reviewedOrderIds: string[];
 }

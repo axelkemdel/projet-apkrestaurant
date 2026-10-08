@@ -12,6 +12,7 @@ import { CustomizeModal } from "../components/server/CustomizeModal";
 import { CartPanel } from "../components/server/CartPanel";
 import { api } from "../lib/api";
 import { emitWithAck, getSocket } from "../lib/socket";
+import { useStaffAlerts } from "../lib/useStaffAlerts";
 import { formatPrice } from "../lib/format";
 import { cartTotal, toOrderLines, useCart } from "../store/cart";
 import { useAuth } from "../store/auth";
@@ -21,6 +22,8 @@ export function ServerView() {
   const { t } = useTranslation();
   const user = useAuth((s) => s.user);
   const { table, orderType, lines, selectTable, selectTakeaway, resetTarget, add, clear } = useCart();
+  // Clients (QR code) : appels, demandes d'addition et commandes passées depuis la table
+  useStaffAlerts({ call: true, bill: true, qrOrders: true });
   const hasTarget = table !== null || orderType !== "DINE_IN";
 
   const [categories, setCategories] = useState<Category[] | null>(null);
@@ -67,7 +70,7 @@ export function ServerView() {
   useEffect(() => {
     const socket = getSocket();
     const onUpdate = (order: Order) => {
-      if (order.status === "READY" && order.server.id === user?.id) {
+      if (order.status === "READY" && order.server?.id === user?.id) {
         const where = order.table ? i18n.t("common.table", { number: order.table.number }) : i18n.t("common.takeaway");
         toast.info(i18n.t("order.readyToServe", { where, number: order.number }));
       }

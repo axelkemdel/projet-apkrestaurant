@@ -77,7 +77,7 @@ export function BillItems({
                 {t("common.ticket", { number: order.number })}
                 <span className="font-normal text-slate-500">
                   {" "}
-                  · {order.server.name} · {formatTime(order.createdAt)}
+                  · {order.server?.name ?? t("common.qrGuest")} · {formatTime(order.createdAt)}
                 </span>
               </span>
               {st && (

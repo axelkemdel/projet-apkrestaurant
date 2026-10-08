@@ -15,7 +15,8 @@ import {
   updateMenuItem,
 } from "../services/adminMenu.js";
 import { createUser, listUsers, resetPin, updateUser } from "../services/adminUsers.js";
-import { broadcastMenuUpdated, disconnectUser } from "../realtime.js";
+import { createTable, deleteTable, listAdminTables, listReviews, regenerateQr, updateTable } from "../services/adminTables.js";
+import { broadcastMenuUpdated, broadcastTable, disconnectTableCustomers, disconnectUser } from "../realtime.js";
 import { clearLoginFailures } from "./auth.js";
 
 export const adminRouter = Router();
@@ -118,6 +119,43 @@ adminRouter.put("/users/:id/pin", async (req, res) => {
   clearLoginFailures(user.id);
   if (revoked) disconnectUser(user.id);
   res.json({ user, pin });
+});
+
+// --- Plan de salle & QR codes -----------------------------------------------
+
+adminRouter.get("/tables", async (_req, res) => {
+  res.json(await listAdminTables());
+});
+
+adminRouter.post("/tables", async (req, res) => {
+  const table = await createTable(req.body);
+  broadcastTable(table);
+  res.status(201).json(table);
+});
+
+adminRouter.put("/tables/:id", async (req, res) => {
+  const table = await updateTable(id(req.params.id), req.body);
+  broadcastTable(table);
+  res.json(table);
+});
+
+adminRouter.delete("/tables/:id", async (req, res) => {
+  const table = await deleteTable(id(req.params.id));
+  broadcastTable(table);
+  res.status(204).end();
+});
+
+/** Nouveau QR code pour la table : l'ancien est invalidé, les clients connectés avec lui sont déconnectés. */
+adminRouter.post("/tables/:id/regenerate-qr", async (req, res) => {
+  const table = await regenerateQr(id(req.params.id), actorOf(req));
+  disconnectTableCustomers(table.id);
+  res.json(table);
+});
+
+// --- Avis clients (portail QR) -----------------------------------------------
+
+adminRouter.get("/reviews", async (req, res) => {
+  res.json(await listReviews(req.query));
 });
 
 // --- Journal d'audit (lecture seule : aucune route de modification ou suppression) ---

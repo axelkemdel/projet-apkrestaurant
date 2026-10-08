@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useAuth } from "../store/auth";
 import { currentLang } from "../i18n";
-import type { NewOrderPayload, Order, OrderStatus, Table } from "../types";
+import type { NewOrderPayload, Order, OrderStatus, StaffAlert, Table } from "../types";
 
 interface ServerToClient {
   new_order: (order: Order) => void;
@@ -14,6 +14,10 @@ interface ServerToClient {
   }) => void;
   bill_updated: (event: { tableId: string | null; orderIds: string[]; remaining: number; closed: boolean }) => void;
   payment_recorded: (event: { paymentId: string; tableId: string | null; orderIds: string[]; amount: number; remaining: number; closed: boolean }) => void;
+  /** Client (QR code) : appel d'un serveur / demande d'addition, puis prise en compte */
+  server_alert: (alert: StaffAlert) => void;
+  request_bill: (alert: StaffAlert) => void;
+  table_alert_cleared: (event: { tableId: string; number: number; kind: "CALL" | "BILL" | "ALL" }) => void;
 }
 
 type AckResponse<T> = { ok: true; data: T } | { ok: false; error: string };

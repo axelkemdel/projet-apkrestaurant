@@ -18,7 +18,8 @@ export async function releaseTableIfIdle(tableId: string | null) {
   if (open > 0) return null;
   const { count } = await prisma.table.updateMany({
     where: { id: tableId, status: "OCCUPIED" },
-    data: { status: "FREE" },
+    // Table libérée : les demandes en attente (serveur, addition) n'ont plus lieu d'être
+    data: { status: "FREE", callRequestedAt: null, billRequestedAt: null },
   });
   return count ? prisma.table.findUnique({ where: { id: tableId } }) : null;
 }

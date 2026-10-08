@@ -30,7 +30,7 @@ interface CartState {
 }
 
 /** Deux lignes identiques (même plat, mêmes options, mêmes notes) sont fusionnées. */
-function lineKey(l: CartLineInput): string {
+export function lineKey(l: CartLineInput): string {
   return [
     l.item.id,
     l.cooking?.fr ?? "",

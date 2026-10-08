@@ -105,6 +105,7 @@ async function main() {
   // Le journal d'audit est en ajout seul (trigger) : seule une réinitialisation complète (TRUNCATE) est possible
   await prisma.$executeRawUnsafe('TRUNCATE "AuditLog"');
   // Ordre de suppression compatible avec les clés étrangères
+  await prisma.review.deleteMany();
   await prisma.discount.deleteMany();
   await prisma.payment.deleteMany();
   await prisma.orderItem.deleteMany();

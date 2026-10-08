@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, Clock, Flame, HandPlatter, Languages, Loader2, Martini, ShoppingBag, Undo2 } from "lucide-react";
+import { CheckCircle2, Clock, Flame, HandPlatter, Languages, Loader2, Martini, QrCode, ShoppingBag, Undo2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { formatElapsed, formatTime, minutesSince } from "../../lib/format";
 import { itemName, modifiersText, orderLang, quickNotesText } from "../../lib/localize";
@@ -84,6 +84,11 @@ export function TicketCard({
                 <ShoppingBag size={18} /> {t("common.takeaway")}
               </>
             )}
+            {order.source === "CUSTOMER" && (
+              <span className="flex items-center rounded bg-violet-500/20 px-1.5 py-0.5 text-violet-300" title={t("kds.qrOrder")} aria-label={t("kds.qrOrder")}>
+                <QrCode size={14} />
+              </span>
+            )}
             {order.language === "EN" && (
               <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[11px] font-bold text-sky-300" title={t("kds.takenInEnglish")}>
                 EN
@@ -91,7 +96,7 @@ export function TicketCard({
             )}
           </div>
           <div className="text-xs text-slate-400">
-            {t("common.ticket", { number: order.number })} · {order.server.name} · {formatTime(order.createdAt)}
+            {t("common.ticket", { number: order.number })} · {order.server?.name ?? t("common.qrGuest")} · {formatTime(order.createdAt)}
           </div>
         </div>
         <div className={`flex items-center gap-1 font-mono text-lg font-bold tabular-nums ${style.text}`}>

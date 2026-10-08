@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Ban, BadgePercent, KeyRound, Loader2, Lock, RefreshCw, ShieldCheck, Tag, Trash2, UserCog, UserPlus, UtensilsCrossed } from "lucide-react";
+import { Ban, BadgePercent, KeyRound, Loader2, Lock, QrCode, RefreshCw, ShieldCheck, Tag, Trash2, UserCog, UserPlus, UtensilsCrossed } from "lucide-react";
 import { api } from "../../lib/api";
 import { formatDateTime, formatPrice } from "../../lib/format";
 import { useTranslation } from "react-i18next";
@@ -20,6 +20,7 @@ const ACTIONS: Record<AuditAction, { Icon: typeof Ban; tone: string }> = {
   USER_ROLE_CHANGED: { Icon: UserCog, tone: "bg-sky-50 text-sky-800" },
   USER_STATUS_CHANGED: { Icon: UserCog, tone: "bg-sky-50 text-sky-800" },
   LOGIN_LOCKED: { Icon: Lock, tone: "bg-red-50 text-red-700" },
+  TABLE_QR_REGENERATED: { Icon: QrCode, tone: "bg-slate-100 text-slate-700" },
 };
 
 const n = (v: unknown) => Number(v ?? 0);
@@ -79,6 +80,8 @@ function describe(e: AuditLogEntry, t: TFunction, lang: Lang): string {
       return t(d.isActive ? "audit.desc.userReactivated" : "audit.desc.userDeactivated", { name: s(d.name) });
     case "LOGIN_LOCKED":
       return t("audit.desc.loginLocked", { name: s(d.targetName) });
+    case "TABLE_QR_REGENERATED":
+      return t("audit.desc.qrRegenerated", { table: s(d.table) });
   }
 }
 

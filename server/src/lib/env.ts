@@ -40,6 +40,8 @@ export const env = {
   maxCashierDiscountPct: Number(process.env.MAX_CASHIER_DISCOUNT_PCT ?? 15),
   /** Proxys de confiance pour l'IP client (X-Forwarded-For), cf. Express « trust proxy ». */
   trustProxy: process.env.TRUST_PROXY ?? "loopback",
+  /** Commande en autonomie par les clients (QR code). false : consultation de la carte et appels seulement. */
+  publicOrdering: process.env.PUBLIC_ORDERING !== "false",
 };
 
 if (!env.cookieSecure) {

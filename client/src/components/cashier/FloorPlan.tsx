@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ChefHat, Clock, ShoppingBag, Truck } from "lucide-react";
+import { ChefHat, Clock, ReceiptText, ShoppingBag, Truck } from "lucide-react";
 import { formatPrice, formatTime } from "../../lib/format";
 import { useTranslation } from "react-i18next";
 import type { CheckoutOverview } from "../../types";
@@ -91,6 +91,15 @@ export function FloorPlan({
               {tb.bill.inKitchen > 0 && (
                 <ChefHat size={13} className="absolute right-1.5 top-1.5 text-amber-500" aria-label={t("cashier.dishesInKitchen")} />
               )}
+              {tb.billRequestedAt && (
+                <span
+                  className="absolute bottom-1.5 right-1.5 flex h-5 w-5 animate-pulse items-center justify-center rounded-full bg-violet-600 text-white"
+                  title={t("alerts.bill", { number: tb.number })}
+                  aria-label={t("alerts.bill", { number: tb.number })}
+                >
+                  <ReceiptText size={12} />
+                </span>
+              )}
               {tb.bill.paid > 0 && hasDue && (
                 <span className="absolute left-1.5 top-1.5 h-2 w-2 rounded-full bg-sky-500" title={t("cashier.depositPaid")} />
               )}
@@ -113,7 +122,7 @@ export function FloorPlan({
               <div className="min-w-0 flex-1">
                 <div className="font-semibold">{t("common.ticket", { number: o.number })}</div>
                 <div className={`flex items-center gap-1 text-xs ${active ? "text-slate-300" : "text-slate-500"}`}>
-                  {o.server}
+                  {o.server ?? t("common.qrGuest")}
                   {o.bill.since && (
                     <>
                       · <Clock size={11} /> {formatTime(o.bill.since)}

@@ -45,7 +45,7 @@ export function Receipt({ data, lang }: { data: ReceiptData; lang: Lang }) {
         }
         right={t("receipt.tickets", { count: data.orderNumbers.length, numbers: data.orderNumbers.join(", #") })}
       />
-      <Row left={t("receipt.server", { names: data.servers.join(", ") })} />
+      {data.servers.length > 0 && <Row left={t("receipt.server", { names: data.servers.join(", ") })} />}
       <Row left={t("receipt.cashier", { name: data.cashier })} />
       <hr className="receipt-sep" />
 

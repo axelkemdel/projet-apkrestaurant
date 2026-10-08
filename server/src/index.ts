@@ -10,6 +10,7 @@ import { tablesRouter } from "./routes/tables.js";
 import { ordersRouter } from "./routes/orders.js";
 import { checkoutRouter } from "./routes/checkout.js";
 import { adminRouter } from "./routes/admin.js";
+import { publicRouter } from "./routes/public.js";
 import { UPLOADS_DIR } from "./lib/uploads.js";
 import { applySecurity } from "./lib/security.js";
 import { langOf, translate } from "./lib/i18n.js";
@@ -28,6 +29,8 @@ app.use("/api/tables", tablesRouter);
 app.use("/api/orders", ordersRouter);
 app.use("/api/checkout", checkoutRouter);
 app.use("/api/admin", adminRouter);
+// Portail client (QR code) : sans compte, limité à la table du jeton
+app.use("/api/public", publicRouter);
 
 // Images des plats (noms aléatoires, contenu vérifié à l'upload)
 app.use(

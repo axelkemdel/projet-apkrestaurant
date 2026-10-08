@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { itemName, useLang } from "../../lib/localize";
 import { toast } from "../Toasts";
+import { ReviewsCard } from "./ReviewsCard";
 import type { DailyStats, PaymentMode, Station, TopItems } from "../../types";
 
 // Palette catégorielle validée (ordre fixe, jamais recyclé) — voir README « Graphiques »
@@ -184,6 +185,8 @@ export function StatsTab() {
           <HourlyChart data={daily.hourly} dataKey="orders" title={t("stats.ticketsPerHour")} format={(v) => t("stats.tickets", { count: v })} />
         </div>
       </Card>
+
+      <ReviewsCard />
     </div>
   );
 }

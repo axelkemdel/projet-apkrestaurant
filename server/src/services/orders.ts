@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { OrderStatus, Prisma } from "@prisma/client";
+import type { OrderSource, OrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { audit, type Actor } from "../lib/audit.js";
@@ -10,6 +10,20 @@ import { normalizeOptions, QUICK_NOTES } from "../lib/menuOptions.js";
 // Validation des entrées
 // ---------------------------------------------------------------------------
 
+/** Ligne de commande : identifiants et choix uniquement, jamais de prix. */
+export const orderLineSchema = z
+  .object({
+    menuItemId: idSchema,
+    quantity: z.number().int().min(1).max(50),
+    notes: z.string().max(200).optional(),
+    quickNotes: z.array(z.enum(QUICK_NOTES)).max(QUICK_NOTES.length).default([]),
+    // Valeurs de référence (françaises) des options choisies
+    cooking: z.string().max(40).optional(),
+    side: z.string().max(40).optional(),
+    extras: z.array(z.string().max(40)).max(10).default([]),
+  })
+  .strict();
+
 export const createOrderSchema = z
   .object({
     type: z.enum(["DINE_IN", "TAKEAWAY", "DELIVERY"]).default("DINE_IN"),
@@ -17,21 +31,7 @@ export const createOrderSchema = z
     customerNote: z.string().max(300).optional(),
     /** Langue dans laquelle la commande a été prise (interface du serveur / client). */
     language: z.enum(["FR", "EN"]).default("FR"),
-    items: z
-      .array(
-        z.object({
-          menuItemId: idSchema,
-          quantity: z.number().int().min(1).max(50),
-          notes: z.string().max(200).optional(),
-          quickNotes: z.array(z.enum(QUICK_NOTES)).max(QUICK_NOTES.length).default([]),
-          // Valeurs de référence (françaises) des options choisies
-          cooking: z.string().max(40).optional(),
-          side: z.string().max(40).optional(),
-          extras: z.array(z.string().max(40)).max(10).default([]),
-        }).strict(),
-      )
-      .min(1, "validation.emptyOrder")
-      .max(100),
+    items: z.array(orderLineSchema).min(1, "validation.emptyOrder").max(100),
   })
   .strict()
   .refine((o) => o.type !== "DINE_IN" || o.tableId, {
@@ -86,7 +86,11 @@ export function listOpenOrdersForTable(tableId: string) {
  * cette table (c'est ce que la cuisine doit préparer) ; l'addition en caisse
  * regroupe tous les bons non soldés de la table.
  */
-export async function createOrder(raw: unknown, serverId: string): Promise<OrderWithRelations> {
+export async function createOrder(
+  raw: unknown,
+  serverId: string | null,
+  source: OrderSource = "STAFF",
+): Promise<OrderWithRelations> {
   const input = createOrderSchema.parse(raw);
 
   return prisma.$transaction(async (tx) => {
@@ -147,6 +151,7 @@ export async function createOrder(raw: unknown, serverId: string): Promise<Order
         type: input.type,
         tableId: input.type === "DINE_IN" ? input.tableId : null,
         serverId,
+        source,
         customerNote: input.customerNote?.trim() || null,
         language: input.language,
         totalAmount,

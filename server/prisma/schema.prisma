@@ -32,6 +32,12 @@ enum OrderStatus {
   CANCELLED
 }
 
+// Origine d'un bon : saisi par le personnel, ou commandé par le client via le QR code de sa table
+enum OrderSource {
+  STAFF
+  CUSTOMER
+}
+
 enum Language {
   FR
   EN
@@ -78,10 +84,18 @@ model Table {
   capacity Int         @default(4)
   zone     String      @default("Salle") // ex : Salle, Terrasse, VIP
   status   TableStatus @default(FREE)
+  // Jeton secret imprimé dans le QR code de la table (/qr/<jeton>). Un simple numéro
+  // serait devinable : n'importe qui pourrait commander « à la table 5 » depuis chez lui.
+  qrToken  String      @unique @default(uuid())
+
+  // Demandes du client en attente (bouton « Appeler le serveur » / « L'addition »)
+  callRequestedAt DateTime?
+  billRequestedAt DateTime?
 
   orders    Order[]
   payments  Payment[]
   discounts Discount[]
+  reviews   Review[]
 }
 
 model Category {
@@ -124,7 +138,8 @@ model Order {
   number       Int          @default(autoincrement()) // n° de bon lisible
   type         OrderType    @default(DINE_IN)
   tableId      String?
-  serverId     String
+  serverId     String? // null : commande passée par le client (QR code)
+  source       OrderSource  @default(STAFF)
   status       OrderStatus  @default(PENDING)
   totalAmount  Int          @default(0)
   paymentMode  PaymentMode?
@@ -138,10 +153,11 @@ model Order {
   paidAt       DateTime? // addition soldée (le bon peut encore être en cuisine)
 
   table     Table?      @relation(fields: [tableId], references: [id])
-  server    User        @relation(fields: [serverId], references: [id])
+  server    User?       @relation(fields: [serverId], references: [id], onDelete: Restrict)
   items     OrderItem[]
   payments  Payment[]
   discounts Discount[]
+  review    Review?
 
   @@index([status])
   @@index([tableId, status])
@@ -237,6 +253,22 @@ model Discount {
   @@index([createdAt])
 }
 
+// Avis laissé par un client depuis le portail QR (une note par bon au plus)
+model Review {
+  id        String   @id @default(cuid())
+  tableId   String
+  orderId   String?  @unique
+  rating    Int // 1 à 5
+  comment   String?
+  language  Language @default(FR)
+  createdAt DateTime @default(now())
+
+  table Table  @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+}
+
 enum AuditAction {
   ORDER_CANCELLED
   DISCOUNT_APPLIED
@@ -248,6 +280,7 @@ enum AuditAction {
   USER_ROLE_CHANGED
   USER_STATUS_CHANGED
   LOGIN_LOCKED
+  TABLE_QR_REGENERATED
 }
 
 // Journal anti-fraude, en AJOUT SEUL : un trigger PostgreSQL refuse UPDATE et DELETE

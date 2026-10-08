@@ -12,6 +12,7 @@ import { ReceiptModal } from "../components/cashier/ReceiptModal";
 import { DiscountModal } from "../components/cashier/DiscountModal";
 import { api } from "../lib/api";
 import { getSocket } from "../lib/socket";
+import { useStaffAlerts } from "../lib/useStaffAlerts";
 import { formatPrice } from "../lib/format";
 import type { Bill, CheckoutOverview, PayRequest, PayResponse } from "../types";
 
@@ -24,6 +25,8 @@ function readAutoPrint(): boolean {
 }
 
 export function CashierView() {
+  // Demandes d'addition faites depuis le QR code des tables
+  useStaffAlerts({ bill: true });
   const [overview, setOverview] = useState<CheckoutOverview | null>(null);
   const [filter, setFilter] = useState<FloorFilter>("DUE");
   const [target, setTarget] = useState<CheckoutTarget | null>(null);
@@ -93,7 +96,7 @@ export function CashierView() {
       }, 150);
     };
     const socket = getSocket();
-    const events = ["new_order", "order_updated", "table_updated", "payment_recorded", "bill_updated", "connect"] as const;
+    const events = ["new_order", "order_updated", "table_updated", "payment_recorded", "bill_updated", "request_bill", "table_alert_cleared", "connect"] as const;
     events.forEach((e) => socket.on(e, refresh));
     return () => {
       clearTimeout(timer);

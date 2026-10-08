@@ -14,7 +14,8 @@
     "db:studio": "prisma studio",
     "db:seed:demo": "tsx prisma/seed-demo.ts",
     "test:security": "node tests/security.e2e.mjs",
-    "test:i18n": "node tests/i18n.e2e.mjs"
+    "test:i18n": "node tests/i18n.e2e.mjs",
+    "test:portal": "node tests/portal.e2e.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

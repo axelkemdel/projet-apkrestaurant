@@ -81,6 +81,17 @@ const fr = {
   "validation.percentRange": "Pourcentage entre 1 et 100",
   "validation.invalidId": "Identifiant invalide",
   "stats.invalidPeriod": "Période invalide",
+  // Tables & portail client (QR code)
+  "table.numberTaken": "La table n° {{number}} existe déjà",
+  "table.hasHistory": "Cette table a un historique de commandes : elle ne peut pas être supprimée",
+  "portal.invalidQr": "QR code invalide ou expiré : demandez de l'aide au personnel",
+  "portal.orderingDisabled": "La commande en ligne est désactivée : appelez un serveur",
+  "portal.noOpenBill": "Aucune commande en cours pour cette table",
+  "portal.nothingToReview": "Passez commande avant de laisser un avis",
+  "portal.alreadyReviewed": "Merci, votre avis a déjà été enregistré",
+  "portal.orderNotFound": "Commande introuvable pour cette table",
+  "portal.tooManyOrders": "Trop de commandes envoyées : patientez quelques minutes ou appelez un serveur",
+  "portal.tooManyRequests": "Demande déjà envoyée, patientez un instant",
 } as const;
 
 export type MessageKey = keyof typeof fr;
@@ -150,6 +161,16 @@ const en: Record<MessageKey, string> = {
   "validation.percentRange": "Percentage between 1 and 100",
   "validation.invalidId": "Invalid identifier",
   "stats.invalidPeriod": "Invalid period",
+  "table.numberTaken": "Table no. {{number}} already exists",
+  "table.hasHistory": "This table has an order history: it cannot be deleted",
+  "portal.invalidQr": "Invalid or expired QR code: please ask the staff for help",
+  "portal.orderingDisabled": "Online ordering is disabled: please call a waiter",
+  "portal.noOpenBill": "No order in progress for this table",
+  "portal.nothingToReview": "Please order before leaving a review",
+  "portal.alreadyReviewed": "Thank you, your review has already been recorded",
+  "portal.orderNotFound": "Order not found for this table",
+  "portal.tooManyOrders": "Too many orders sent: please wait a few minutes or call a waiter",
+  "portal.tooManyRequests": "Request already sent, please wait a moment",
 };
 
 const dictionaries: Record<Lang, Record<MessageKey, string>> = { fr, en };

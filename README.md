@@ -6,6 +6,7 @@ Application de gestion des commandes : prise de commande par les serveurs (table
 > **Module 2** : Caisse — additions par table, addition partagée (parts égales / par articles / acompte), Espèces avec rendu de monnaie, Carte, Orange Money, Telecel Cash, ticket thermique 80 mm.
 > **Module 3** : Tableau de bord gérant — KPI et graphiques en temps réel, gestion de la carte (ruptures diffusées en direct, images), personnel et codes PIN.
 > **Module 5** : Multilingue FR / EN — interface intégralement traduite (sélecteur sur tous les écrans), carte et bons bilingues, bascule de traduction des bons en cuisine et en caisse, tickets dans la langue du client, erreurs serveur traduites.
+> **Module 6** : Portail client par QR code — chaque table a un QR code secret : carte bilingue avec photos, commande envoyée directement en cuisine, suivi des plats en direct, appel du serveur, demande d'addition, avis 1 à 5 étoiles ; génération / impression des QR codes dans le tableau de bord.
 > **Module 4** : Sécurité & responsive — session en cookie HttpOnly, verrouillage après inactivité, helmet / CORS / anti-CSRF / limitation de débit, validation Zod stricte, remises plafonnées, journal d'audit anti-fraude en ajout seul, recadrage d'images, interface mobile-first (barre d'onglets, tiroirs, cibles de 48 px).
 
 ## Stack
@@ -31,6 +32,9 @@ server/
   src/services/adminUsers.ts# personnel, rôles, codes PIN
   src/lib/uploads.ts        # stockage des images (uploads/dishes/), contrôle du format
   prisma/seed-demo.ts       # 30 jours d'historique de ventes pour le tableau de bord
+  src/services/publicPortal.ts # portail client (QR) : table par jeton, commande, appels, avis
+  src/services/adminTables.ts  # plan de salle, régénération des QR codes, avis clients
+  src/routes/public.ts      # API publique /api/public (sans compte, débit limité)
   src/routes/*.ts           # API REST : auth, menu, tables, orders
 client/
   src/pages/Login.tsx       # connexion par profil + code PIN
@@ -40,7 +44,11 @@ client/
   src/components/cashier/   # FloorPlan, BillItems, PaymentPanel (split + clavier), Receipt (ticket 80 mm)
   src/pages/AdminView.tsx   # Tableau de bord gérant (onglets Stats / Menu / Personnel)
   src/components/admin/     # StatsTab (Recharts), MenuTab + MenuItemForm, StaffTab
-  src/store/cart.ts         # panier (Zustand)
+  src/pages/CustomerTableDashboard.tsx # portail client /qr/:token (carte, panier, suivi, appels, avis)
+  src/components/customer/  # GuestMenu, GuestCartSheet, OrderTracker, ReviewModal
+  src/components/admin/TablesTab.tsx # plan de salle & QR codes (impression A4 / PDF, PNG)
+  src/lib/qr.ts             # génération des QR codes (SVG, PNG, planche imprimable)
+  src/store/cart.ts         # panier (Zustand) ; store/guestCart.ts : panier client
   src/lib/socket.ts         # client Socket.io typé
 ```
 
@@ -233,3 +241,45 @@ Règles :
 **Migration** — `20261008180000_bilingual_menu` renomme les colonnes existantes (pas de `DROP`) et initialise l'anglais avec le français : compléter ensuite les libellés anglais dans « Gestion du menu ». Les options déjà stockées en format monolingue sont lues automatiquement comme `{ fr, en }`.
 
 **Vérification** — `npm run test:i18n -w server` (API démarrée, base de démo fraîche).
+
+## Portail client par QR code (Module 6)
+
+**Parcours client** — Le client scanne le QR code de sa table et arrive sur `/qr/<jeton>` (aucun compte, aucun mot de passe). Si la table est déjà occupée, il **rejoint la session en cours** : tous les bons non soldés de la table s'affichent, y compris ceux pris par le serveur, et plusieurs téléphones de la même table voient la même chose en direct.
+- **Carte** bilingue (sélecteur FR / EN), grandes photos, puces de catégories qui suivent le défilement, recherche dans les deux langues, plats épuisés grisés.
+- **Personnalisation** : cuissons, accompagnements, suppléments payants, notes rapides (« Sans oignon »…) et texte libre.
+- **Panier** en tiroir : quantités, note pour la cuisine, total en FCFA ; conservé si la page est rechargée. L'envoi crée le bon et le diffuse **directement en cuisine / au bar** (`new_order`) ; la table passe `OCCUPIED`.
+- **Suivi en direct** de chaque bon : ⏳ Reçue → 👨‍🍳 En préparation → 🔔 Prête → ✅ Servie (barre de progression animée, vibration quand c'est prêt), sans rechargement de page.
+- **Appeler le serveur** et **Demander l'addition** : alerte instantanée (son, vibration, bandeau « Demandes des clients » et badge sur la table) sur les tablettes des serveurs ; la caisse reçoit les demandes d'addition. Le serveur clique « Pris en compte » et l'alerte disparaît partout, y compris chez le client.
+- **Avis** : une fois les plats servis, l'addition demandée ou la table réglée, une fenêtre propose une note de 1 à 5 étoiles et un commentaire facultatif. Le gérant voit la moyenne, la répartition et les derniers commentaires dans « Aperçu / Stats ».
+- Quand l'addition est réglée, la table est libérée et le client voit « Merci de votre visite ! » ; les clients suivants repartent d'une session vierge.
+
+**QR codes (gérant → onglet « Plan de salle & QR »)** — création / modification / suppression des tables, aperçu du QR code de chaque table, **impression** d'une planche A4 de 6 supports bilingues à découper (« Enregistrer au format PDF » dans la boîte d'impression pour obtenir un PDF), **image PNG** haute définition, copie du lien. **Nouveau QR code** : invalide immédiatement l'ancien (QR code photographié ou emporté) et déconnecte les clients qui l'utilisaient ; l'action est tracée au journal d'audit.
+
+L'adresse encodée est celle depuis laquelle l'administration est ouverte, ou `VITE_PUBLIC_URL` (`client/.env`) si elle est définie. Un avertissement s'affiche si cette adresse est `localhost` : les téléphones des clients ne pourraient pas l'ouvrir. Dans GitHub Codespaces, passez le port 5173 en visibilité **Public** (onglet Ports) pour que les téléphones puissent ouvrir la page.
+
+**Sécurité**
+- Le QR code contient un **jeton secret** (UUID v4 aléatoire) et non le numéro de table : `/table/5` serait devinable et permettrait de commander pour une table depuis l'extérieur. Le jeton n'est jamais renvoyé aux écrans du personnel (seul le gérant le voit).
+- API publique `/api/public/*` : schémas Zod stricts (aucun prix accepté du client, table déduite du jeton, 30 lignes et 20 unités par ligne au plus), prix et disponibilités revérifiés côté serveur, **débit limité par appareil et par table** (8 commandes / 10 min, 12 appels / 10 min, 5 avis / h) ; un même appel répété dans la minute n'est pas renotifié.
+- Temps réel : espace Socket.io séparé `/public`, authentifié par le jeton ; un client ne reçoit que les événements de **sa** table (vue épurée des bons : ni serveur, ni paiements) et ne peut rien émettre. L'espace du personnel reste fermé sans session.
+- Un avis porte forcément sur un bon réel et récent de la table, un seul avis par bon.
+- `PUBLIC_ORDERING=false` (`server/.env`) : les clients consultent la carte, suivent leurs bons et appellent le serveur, mais ne commandent pas eux-mêmes.
+- Les bons passés par les clients portent `source = CUSTOMER` et n'ont pas de serveur. Ils sont signalés par une icône QR en cuisine et par « Client (QR) » en caisse.
+
+| Méthode | Route | Accès |
+| --- | --- | --- |
+| GET | `/api/public/table/:token` | public — table, carte bilingue, bons en cours, bons déjà notés |
+| POST | `/api/public/orders` | public — `{ token, language, customerNote?, items[] }` → bon envoyé en cuisine |
+| POST | `/api/public/table/:token/call-server` | public — alerte `server_alert` aux serveurs |
+| POST | `/api/public/table/:token/request-bill` | public — alerte `request_bill` aux serveurs et à la caisse |
+| POST | `/api/public/reviews` | public — `{ token, orderId?, rating: 1–5, comment? }` |
+| POST | `/api/tables/:id/requests/clear` | SERVEUR, CAISSE — `{ kind?: CALL\|BILL }` demande prise en compte |
+| GET / POST / PUT / DELETE | `/api/admin/tables[/:id]` | ADMIN — plan de salle (jetons QR inclus) |
+| POST | `/api/admin/tables/:id/regenerate-qr` | ADMIN — nouveau jeton, ancien invalidé |
+| GET | `/api/admin/reviews` | ADMIN — moyenne, répartition, derniers avis |
+
+Événements Socket.io ajoutés : `server_alert`, `request_bill`, `table_alert_cleared` (personnel) ; sur l'espace `/public` : `order_status_changed`, `table_updated`, `menu_updated`.
+
+**Migration** — `20261009100000_customer_portal` : jeton QR généré pour les tables existantes, `Order.source`, `Order.serverId` facultatif, demandes en attente sur `Table`, modèle `Review` (note contrainte entre 1 et 5 en base).
+
+**Vérification** — `npm run test:portal -w server` (API démarrée, base de démo fraîche : `npm run db:seed -w server`).
+

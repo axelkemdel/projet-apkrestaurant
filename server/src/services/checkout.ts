@@ -90,7 +90,8 @@ export async function getOrderBill(orderId: string) {
 
 export async function getCheckoutOverview() {
   const [tables, openOrders] = await Promise.all([
-    prisma.table.findMany({ orderBy: { number: "asc" } }),
+    // Jeton du QR code jamais exposé hors du back-office
+    prisma.table.findMany({ orderBy: { number: "asc" }, omit: { qrToken: true } }),
     prisma.order.findMany({
       where: { paidAt: null, status: { not: "CANCELLED" } },
       select: {
@@ -133,7 +134,7 @@ export async function getCheckoutOverview() {
     tables: tables.map((t) => ({ ...t, bill: summarize(openOrders.filter((o) => o.tableId === t.id)) })),
     takeaway: openOrders
       .filter((o) => !o.tableId)
-      .map((o) => ({ id: o.id, number: o.number, type: o.type, status: o.status, server: o.server.name, bill: summarize([o]) })),
+      .map((o) => ({ id: o.id, number: o.number, type: o.type, status: o.status, server: o.server?.name ?? null, bill: summarize([o]) })),
   };
 }
 
@@ -219,7 +220,10 @@ async function settleBill(tx: Tx, target: BillTarget, bill: Awaited<ReturnType<t
       where: { tableId: target.tableId, status: { notIn: ["PAID", "CANCELLED"] } },
     });
     if (stillOpen === 0) {
-      const table = await tx.table.update({ where: { id: target.tableId }, data: { status: "FREE" } });
+      const table = await tx.table.update({
+        where: { id: target.tableId },
+        data: { status: "FREE", callRequestedAt: null, billRequestedAt: null },
+      });
       tableReleased = { id: table.id, number: table.number, status: "FREE" };
     }
   }
@@ -438,7 +442,8 @@ export async function getReceipt(paymentId: string) {
     ticketNumber: payment.number,
     createdAt: payment.createdAt,
     cashier: payment.cashier.name,
-    servers: [...new Set(payment.orders.map((o) => o.server.name))],
+    // Bons commandés par le client (QR) : pas de serveur à nommer
+    servers: [...new Set(payment.orders.flatMap((o) => (o.server ? [o.server.name] : [])))],
     table: payment.table?.number ?? null,
     orderType: first?.type ?? "DINE_IN",
     /** Langue du client (langue de prise de commande) : langue par défaut du ticket */

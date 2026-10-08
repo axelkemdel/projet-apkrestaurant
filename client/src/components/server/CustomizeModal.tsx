@@ -3,7 +3,7 @@ import { Minus, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../Modal";
 import { formatPrice } from "../../lib/format";
-import { itemName, pick, useLang } from "../../lib/localize";
+import { itemDescription, itemName, pick, useLang } from "../../lib/localize";
 import type { CartLineInput } from "../../store/cart";
 import { QUICK_NOTES, type Extra, type Label, type MenuItem, type QuickNote } from "../../types";
 
@@ -11,10 +11,18 @@ export function CustomizeModal({
   item,
   onClose,
   onConfirm,
+  money = formatPrice,
+  maxQuantity = 50,
+  showImage = false,
 }: {
   item: MenuItem | null;
   onClose: () => void;
   onConfirm: (line: CartLineInput) => void;
+  /** Mise en forme des montants (le portail client affiche la devise complète, ex. « FCFA ») */
+  money?: (amount: number) => string;
+  maxQuantity?: number;
+  /** Photo et description en tête (portail client) */
+  showImage?: boolean;
 }) {
   const { t } = useTranslation();
   const lang = useLang();
@@ -50,7 +58,7 @@ export function CustomizeModal({
       title={
         <div>
           {item && itemName(item, lang)}
-          <div className="text-sm font-normal text-slate-500">{item && formatPrice(item.price)}</div>
+          <div className="text-sm font-normal text-slate-500">{item && money(item.price)}</div>
         </div>
       }
       footer={
@@ -60,7 +68,7 @@ export function CustomizeModal({
               <Minus size={18} />
             </button>
             <span className="w-8 text-center text-lg font-bold">{quantity}</span>
-            <button className="flex h-12 w-12 items-center justify-center" onClick={() => setQuantity((q) => q + 1)} aria-label={t("order.more")}>
+            <button className="flex h-12 w-12 items-center justify-center" onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))} aria-label={t("order.more")}>
               <Plus size={18} />
             </button>
           </div>
@@ -68,12 +76,16 @@ export function CustomizeModal({
             onClick={() => item && onConfirm({ item, quantity, cooking, side, extras, quickNotes, notes: notes.trim() || undefined })}
             className="min-h-12 flex-1 rounded-xl bg-brand-500 font-semibold text-white hover:bg-brand-600"
           >
-            {t("order.addFor", { price: formatPrice(unit * quantity) })}
+            {t("order.addFor", { price: money(unit * quantity) })}
           </button>
         </div>
       }
     >
       <div className="space-y-5">
+        {showImage && item?.imageUrl && (
+          <img src={item.imageUrl} alt="" className="-mx-5 -mt-4 aspect-[16/9] w-[calc(100%+2.5rem)] max-w-none object-cover" onError={(e) => (e.currentTarget.style.display = "none")} />
+        )}
+        {showImage && item && itemDescription(item, lang) && <p className="text-sm text-slate-600">{itemDescription(item, lang)}</p>}
         {options.cooking?.length ? (
           <ChoiceGroup label={t("order.cooking")} values={options.cooking} value={cooking} onChange={setCooking} />
         ) : null}
@@ -100,7 +112,7 @@ export function CustomizeModal({
                       />
                       {pick(e, lang)}
                     </span>
-                    <span className="text-sm text-slate-500">{e.price ? `+ ${formatPrice(e.price)}` : t("order.free")}</span>
+                    <span className="text-sm text-slate-500">{e.price ? `+ ${money(e.price)}` : t("order.free")}</span>
                   </label>
                 );
               })}

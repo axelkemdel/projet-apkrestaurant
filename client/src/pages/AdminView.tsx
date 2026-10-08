@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { NavLink } from "react-router-dom";
-import { BarChart3, BookOpen, ChefHat, ChevronsLeft, ChevronsRight, LayoutGrid, ScrollText, Users, UtensilsCrossed, Wallet } from "lucide-react";
+import { BarChart3, BookOpen, ChefHat, ChevronsLeft, ChevronsRight, LayoutGrid, QrCode, ScrollText, Users, UtensilsCrossed, Wallet } from "lucide-react";
 import { AppHeader } from "../components/AppHeader";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../components/Modal";
@@ -9,10 +9,12 @@ import { StatsTab } from "../components/admin/StatsTab";
 import { MenuTab } from "../components/admin/MenuTab";
 import { StaffTab } from "../components/admin/StaffTab";
 import { AuditTab } from "../components/admin/AuditTab";
+import { TablesTab } from "../components/admin/TablesTab";
 
 const TABS = [
   { id: "stats", label: "admin.tabStats", short: "admin.shortStats", Icon: BarChart3 },
   { id: "menu", label: "admin.tabMenu", short: "admin.shortMenu", Icon: BookOpen },
+  { id: "tables", label: "admin.tabTables", short: "admin.shortTables", Icon: QrCode },
   { id: "staff", label: "admin.tabStaff", short: "admin.shortStaff", Icon: Users },
   { id: "audit", label: "admin.tabAudit", short: "admin.shortAudit", Icon: ScrollText },
 ] as const;
@@ -131,7 +133,17 @@ export function AdminView() {
           <div className="mx-auto max-w-7xl p-3 pb-24 sm:p-4 sm:pb-6 lg:p-6">
             <AnimatePresence mode="wait">
               <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-                {tab === "stats" ? <StatsTab /> : tab === "menu" ? <MenuTab /> : tab === "staff" ? <StaffTab /> : <AuditTab />}
+                {tab === "stats" ? (
+                  <StatsTab />
+                ) : tab === "menu" ? (
+                  <MenuTab />
+                ) : tab === "tables" ? (
+                  <TablesTab />
+                ) : tab === "staff" ? (
+                  <StaffTab />
+                ) : (
+                  <AuditTab />
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -140,7 +152,7 @@ export function AdminView() {
 
       {/* Barre d'onglets inférieure : smartphone */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-6 border-t border-slate-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden"
         role="tablist"
       >
         {TABS.map(({ id, short, Icon }) => (

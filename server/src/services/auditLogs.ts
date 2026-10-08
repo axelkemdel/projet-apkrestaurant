@@ -1,26 +1,15 @@
 import { z } from "zod";
-import type { Prisma } from "@prisma/client";
+import { AuditAction, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { idSchema } from "../lib/security.js";
 
-const ACTIONS = [
-  "ORDER_CANCELLED",
-  "DISCOUNT_APPLIED",
-  "MENU_PRICE_CHANGED",
-  "MENU_ITEM_CREATED",
-  "MENU_ITEM_DELETED",
-  "PIN_RESET",
-  "USER_CREATED",
-  "USER_ROLE_CHANGED",
-  "USER_STATUS_CHANGED",
-  "LOGIN_LOCKED",
-] as const;
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "validation.dateFormat");
 
 const querySchema = z
   .object({
-    action: z.enum(ACTIONS).optional(),
+    // Liste dérivée du schéma : toute nouvelle action est filtrable sans oubli
+    action: z.nativeEnum(AuditAction).optional(),
     userId: idSchema.optional(),
     from: day.optional(),
     to: day.optional(),
