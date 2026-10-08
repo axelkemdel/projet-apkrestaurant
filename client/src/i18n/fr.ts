@@ -407,7 +407,7 @@ export const fr = {
     kitchenLong: "Cuisine & Bar",
   },
   native: {
-    notConfiguredText: "Cette application n'a pas été compilée avec l'adresse du serveur RestoApp du restaurant. Recompilez l'APK en indiquant cette adresse :",
+    notConfiguredText: "Cette application n'a pas été compilée avec l'adresse du serveur THAONI APP du restaurant. Recompilez l'APK en indiquant cette adresse :",
     notConfiguredTitle: "Serveur non configuré",
   },
   order: {

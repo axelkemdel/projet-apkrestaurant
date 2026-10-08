@@ -2,7 +2,7 @@ import "dotenv/config";
 
 /** Informations légales imprimées en en-tête des tickets de caisse. */
 export const restaurantInfo = {
-  name: process.env.RESTAURANT_NAME ?? "RestoApp",
+  name: process.env.RESTAURANT_NAME ?? "THAONI APP",
   address: process.env.RESTAURANT_ADDRESS ?? "",
   phone: process.env.RESTAURANT_PHONE ?? "",
   nif: process.env.RESTAURANT_NIF ?? "",

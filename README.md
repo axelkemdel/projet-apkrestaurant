@@ -1,4 +1,4 @@
-# RestoApp — POS & KDS temps réel pour restaurants
+# THAONI APP — POS & KDS temps réel pour restaurants
 
 Application de gestion des commandes : prise de commande par les serveurs (tablette / mobile), écran cuisine & bar (KDS) en temps réel, caisse et tableau de bord gérant.
 
@@ -324,7 +324,7 @@ L'adresse encodée est celle depuis laquelle l'administration est ouverte, ou `V
 
 ## Application Android (Capacitor)
 
-Le dossier `client/android/` est un projet Android Studio prêt à compiler (Capacitor 8, application **RestoApp**, identifiant **`com.restoapp.pos`**, interface web `client/dist`). Plugins : `@capacitor/status-bar` (barre d'état sombre), `@capacitor/keyboard` (l'écran se redimensionne au-dessus du clavier virtuel), `@capacitor/screen-orientation` (**paysage imposé** pour la caisse et la cuisine, orientation libre ailleurs).
+Le dossier `client/android/` est un projet Android Studio prêt à compiler (Capacitor 8, application **THAONI APP**, identifiant **`com.restoapp.pos`**, interface web `client/dist`). Plugins : `@capacitor/status-bar` (barre d'état sombre), `@capacitor/keyboard` (l'écran se redimensionne au-dessus du clavier virtuel), `@capacitor/screen-orientation` (**paysage imposé** pour la caisse et la cuisine, orientation libre ailleurs).
 
 **Principe** : l'APK charge l'interface depuis le serveur RestoApp du restaurant (`CAP_SERVER_URL`). Interface et API ont ainsi la même origine, condition pour des cookies `HttpOnly` + `SameSite=Strict`, et une mise à jour de l'interface sur le serveur arrive sur toutes les tablettes sans réinstaller l'APK. En production, le serveur Node sert lui-même l'interface compilée (`npm run build` puis `npm start -w server` : interface + API sur le port 4000).
 
@@ -344,5 +344,6 @@ cd client/android && ./gradlew assembleDebug   # → app/build/outputs/apk/debug
 - Serveur en `http://` sur le réseau local : mettre `COOKIE_SECURE=false` dans `server/.env` (Android refuse les cookies `Secure` hors HTTPS) et ajouter l'adresse à `CORS_ORIGIN`.
 - Pas de sauvegarde cloud des données de l'application (`allowBackup=false`, règles d'extraction Android 12+) ; débogage WebView désactivé sauf `CAP_DEBUG=true`.
 - APK compilé sans `CAP_SERVER_URL` : un écran explique comment recompiler avec l'adresse du serveur.
+- Icônes et écrans de démarrage : générés depuis `client/public/assets/logoresto.png` par `python3 client/scripts/generate_android_assets.py` (Pillow) ; à relancer après un changement de logo.
 - Pour publier : générer un APK / AAB **signé** (Android Studio → Build → Generate Signed Bundle / APK) avec une clé conservée hors du dépôt.
 

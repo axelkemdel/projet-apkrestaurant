@@ -408,7 +408,7 @@ export const en: Translation = {
     kitchenLong: "Kitchen & Bar",
   },
   native: {
-    notConfiguredText: "This app was not built with the address of the restaurant's RestoApp server. Rebuild the APK with that address:",
+    notConfiguredText: "This app was not built with the address of the restaurant's THAONI APP server. Rebuild the APK with that address:",
     notConfiguredTitle: "Server not configured",
   },
   order: {

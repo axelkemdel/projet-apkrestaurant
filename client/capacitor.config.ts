@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 import { KeyboardResize, KeyboardStyle } from "@capacitor/keyboard";
 
 /**
- * Application Android RestoApp (tablettes serveur / cuisine / caisse).
+ * Application Android THAONI APP (tablettes serveur / cuisine / caisse).
  *
  * L'application charge l'interface depuis le serveur RestoApp du restaurant
  * (CAP_SERVER_URL, ex. https://resto.example.com ou http://192.168.1.10:4000) : interface
@@ -19,7 +19,7 @@ if (!serverUrl) {
 
 const config: CapacitorConfig = {
   appId: "com.restoapp.pos",
-  appName: "RestoApp",
+  appName: "THAONI APP",
   webDir: "dist",
   ...(serverUrl && {
     server: {

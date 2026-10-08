@@ -29,9 +29,11 @@ export function AppHeader({
         dark ? "border-b border-slate-800 bg-slate-950 text-slate-100" : "border-b border-slate-200 bg-white"
       }`}
     >
-      <span className="rounded-lg bg-brand-500 px-2 py-1 text-sm font-black tracking-tight text-white">
-        <span className="sm:hidden">R</span>
-        <span className="hidden sm:inline">RestoApp</span>
+      <span className="flex shrink-0 items-center gap-2">
+        <img src="/assets/logoresto.png" alt="THAONI APP" className="h-9 w-9 rounded-lg object-cover" />
+        <span className="hidden text-sm font-black tracking-tight sm:inline">
+          THAONI <span className="text-brand-500">APP</span>
+        </span>
       </span>
       <h1 className="truncate text-base font-semibold">{title}</h1>
       {user?.role === "ADMIN" && !hideNav && (
