@@ -13,13 +13,20 @@ function sendError(req: Request, res: Response, status: number, code: MessageKey
 }
 
 /** Origine autorisée : liste CORS_ORIGIN, ou même hôte que le serveur (accès direct / proxy). */
-export function isAllowedOrigin(origin: string, host: string | undefined) {
+export function isAllowedOrigin(origin: string, host: string | undefined, forwardedHost?: string | string[]) {
   if (env.corsOrigin.includes(origin)) return true;
+  let originHost: string;
   try {
-    return host !== undefined && new URL(origin).host === host;
+    originHost = new URL(origin).host;
   } catch {
     return false;
   }
+  // Même hôte que la page servie : accès direct, ou via un proxy qui annonce l'hôte d'origine
+  // (Vite / GitHub Codespaces transmettent X-Forwarded-Host)
+  const forwarded = (Array.isArray(forwardedHost) ? forwardedHost[0] : forwardedHost)?.split(",")[0]?.trim();
+  if (originHost === host || (forwarded && originHost === forwarded)) return true;
+  console.warn(`⚠ Origine refusée : ${origin} (ajoutez-la à CORS_ORIGIN dans server/.env si c'est votre interface)`);
+  return false;
 }
 
 /**
@@ -29,7 +36,7 @@ export function isAllowedOrigin(origin: string, host: string | undefined) {
 const originCheck: RequestHandler = (req, _res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
   const origin = req.headers.origin;
-  if (origin && !isAllowedOrigin(origin, req.headers.host)) throw new HttpError(403, "http.originNotAllowed");
+  if (origin && !isAllowedOrigin(origin, req.headers.host, req.headers["x-forwarded-host"])) throw new HttpError(403, "http.originNotAllowed");
   next();
 };
 

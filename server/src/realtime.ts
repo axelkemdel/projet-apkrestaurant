@@ -189,7 +189,7 @@ export function initRealtime(httpServer: HttpServer): IO {
     // Anti « cross-site WebSocket hijacking » : origine vérifiée avant le handshake
     allowRequest: (req, cb) => {
       const origin = req.headers.origin;
-      cb(null, !origin || isAllowedOrigin(origin, req.headers.host));
+      cb(null, !origin || isAllowedOrigin(origin, req.headers.host, req.headers["x-forwarded-host"]));
     },
   });
 
