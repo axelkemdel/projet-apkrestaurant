@@ -3,15 +3,16 @@ import { useAuth } from "./store/auth";
 import { Login } from "./pages/Login";
 import { ServerView } from "./pages/ServerView";
 import { KitchenView } from "./pages/KitchenView";
+import { CashierView } from "./pages/CashierView";
 import { Toaster } from "./components/Toasts";
 import type { Role } from "./types";
 
-/** Écran d'accueil par rôle (caisse et admin arrivent dans les prochaines étapes). */
+/** Écran d'accueil par rôle (le tableau de bord gérant arrive dans une prochaine étape). */
 const homeByRole: Record<Role, string> = {
   SERVEUR: "/serveur",
   CUISINE: "/cuisine",
-  CAISSE: "/serveur",
-  ADMIN: "/serveur",
+  CAISSE: "/caisse",
+  ADMIN: "/caisse",
 };
 
 function Guard({ roles, children }: { roles: Role[]; children: React.ReactNode }) {
@@ -40,6 +41,14 @@ export function App() {
           element={
             <Guard roles={["CUISINE"]}>
               <KitchenView />
+            </Guard>
+          }
+        />
+        <Route
+          path="/caisse"
+          element={
+            <Guard roles={["CAISSE"]}>
+              <CashierView />
             </Guard>
           }
         />

@@ -5,6 +5,7 @@ import { env } from "./lib/env.js";
 import { verifyToken, type AuthUser } from "./lib/auth.js";
 import { HttpError, toErrorPayload } from "./lib/errors.js";
 import { createOrder, updateOrderStatus, type OrderWithRelations } from "./services/orders.js";
+import type { PayResult } from "./services/checkout.js";
 import { releaseTableIfIdle } from "./services/tables.js";
 
 /**
@@ -18,11 +19,22 @@ import { releaseTableIfIdle } from "./services/tables.js";
  *   - `new_order`     : nouveau bon à préparer (écrans cuisine/bar + tablettes)
  *   - `order_updated` : changement de statut d'un bon
  *   - `table_updated` : changement de statut d'une table
+ *   - `payment_recorded` : versement encaissé (solde restant, addition close ou non)
  */
 export interface ServerToClientEvents {
   new_order: (order: OrderWithRelations) => void;
   order_updated: (order: OrderWithRelations) => void;
   table_updated: (table: Pick<Table, "id" | "number" | "status">) => void;
+  payment_recorded: (event: PaymentEvent) => void;
+}
+
+export interface PaymentEvent {
+  paymentId: string;
+  tableId: string | null;
+  orderIds: string[];
+  amount: number;
+  remaining: number;
+  closed: boolean;
 }
 
 type Ack<T> = (res: { ok: true; data: T } | { ok: false; error: string }) => void;
@@ -70,10 +82,27 @@ export function broadcastNewOrder(order: OrderWithRelations) {
 
 export async function broadcastOrderUpdated(order: OrderWithRelations) {
   getIO().to([ROOMS.kitchen, ROOMS.floor, ROOMS.cashier, ROOMS.admin]).emit("order_updated", order);
-  if (order.status === "CANCELLED") {
+  if (order.status === "CANCELLED" || order.status === "PAID") {
     const table = await releaseTableIfIdle(order.tableId);
     if (table) getIO().emit("table_updated", { id: table.id, number: table.number, status: table.status });
   }
+}
+
+/** Après un encaissement : caisses, serveurs et KDS sont mis à jour ; la table libérée est diffusée à tous. */
+export function broadcastPayment(result: PayResult) {
+  const io = getIO();
+  io.to([ROOMS.cashier, ROOMS.floor, ROOMS.admin]).emit("payment_recorded", {
+    paymentId: result.payment.id,
+    tableId: result.tableId,
+    orderIds: result.orderIds,
+    amount: result.payment.amount,
+    remaining: result.remaining,
+    closed: result.closed,
+  });
+  for (const order of result.updatedOrders) {
+    io.to([ROOMS.kitchen, ROOMS.floor, ROOMS.cashier, ROOMS.admin]).emit("order_updated", order);
+  }
+  if (result.tableReleased) io.emit("table_updated", result.tableReleased);
 }
 
 function canSendOrders(user: AuthUser) {

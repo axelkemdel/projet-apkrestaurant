@@ -27,3 +27,14 @@ export const roleLabel = {
   CUISINE: "Cuisine / Bar",
   CAISSE: "Caisse",
 } as const;
+
+export const paymentModeLabel = {
+  CASH: "Espèces",
+  CARD: "Carte bancaire",
+  ORANGE_MONEY: "Orange Money",
+  TELECEL_CASH: "Telecel Cash",
+} as const;
+
+export function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+}

@@ -7,6 +7,7 @@ interface ServerToClient {
   new_order: (order: Order) => void;
   order_updated: (order: Order) => void;
   table_updated: (table: Pick<Table, "id" | "number" | "status">) => void;
+  payment_recorded: (event: { paymentId: string; tableId: string | null; orderIds: string[]; amount: number; remaining: number; closed: boolean }) => void;
 }
 
 type AckResponse<T> = { ok: true; data: T } | { ok: false; error: string };

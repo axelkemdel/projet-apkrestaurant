@@ -9,6 +9,7 @@ import { authRouter } from "./routes/auth.js";
 import { menuRouter } from "./routes/menu.js";
 import { tablesRouter } from "./routes/tables.js";
 import { ordersRouter } from "./routes/orders.js";
+import { checkoutRouter } from "./routes/checkout.js";
 
 const app = express();
 app.use(cors({ origin: env.corsOrigin }));
@@ -21,6 +22,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/menu", menuRouter);
 app.use("/api/tables", tablesRouter);
 app.use("/api/orders", ordersRouter);
+app.use("/api/checkout", checkoutRouter);
 app.use("/api", (_req, res) => {
   res.status(404).json({ error: "Route introuvable" });
 });

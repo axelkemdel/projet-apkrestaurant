@@ -98,3 +98,94 @@ export interface NewOrderPayload {
   customerNote?: string;
   items: NewOrderLine[];
 }
+
+// ---------------------------------------------------------------------------
+// Caisse
+// ---------------------------------------------------------------------------
+
+export type PaymentMode = "CASH" | "CARD" | "ORANGE_MONEY" | "TELECEL_CASH";
+
+export interface BillSummary {
+  total: number;
+  paid: number;
+  remaining: number;
+  orderCount: number;
+  inKitchen: number;
+  since: string | null;
+}
+
+export interface CheckoutOverview {
+  tables: (Omit<Table, "openOrders"> & { bill: BillSummary })[];
+  takeaway: { id: string; number: number; type: OrderType; status: OrderStatus; server: string; bill: BillSummary }[];
+}
+
+export interface BillOrderItem extends OrderItem {
+  paidQuantity: number;
+}
+
+export interface BillPayment {
+  id: string;
+  number: number;
+  amount: number;
+  mode: PaymentMode;
+  amountReceived: number;
+  changeReturned: number;
+  reference: string | null;
+  label: string | null;
+  createdAt: string;
+  cashier: { id: string; name: string };
+}
+
+export interface Bill {
+  target:
+    | { kind: "table"; table: { id: string; number: number; zone: string; status: TableStatus } }
+    | { kind: "order"; order: { id: string; number: number; type: OrderType } };
+  orders: (Omit<Order, "items"> & { items: BillOrderItem[] })[];
+  payments: BillPayment[];
+  totals: { total: number; paid: number; remaining: number; unpaidItemsAmount: number };
+  inKitchen: number;
+}
+
+export interface PayRequest {
+  tableId?: string;
+  orderId?: string;
+  mode: PaymentMode;
+  amount?: number;
+  items?: { orderItemId: string; quantity: number }[];
+  amountReceived?: number;
+  reference?: string;
+  label?: string;
+}
+
+export interface PayResponse {
+  paymentId: string;
+  ticketNumber: number;
+  amount: number;
+  changeReturned: number;
+  remaining: number;
+  closed: boolean;
+  tableReleased: boolean;
+}
+
+export interface Receipt {
+  restaurant: { name: string; address: string; phone: string; nif: string; rccm: string; footer: string; currency: string };
+  ticketNumber: number;
+  createdAt: string;
+  cashier: string;
+  servers: string[];
+  table: number | null;
+  orderType: OrderType;
+  orderNumbers: number[];
+  lines: { id: string; name: string; quantity: number; unitPrice: number; total: number; modifiers: OrderItemModifiers | null }[];
+  paidLines: { name: string; quantity: number; amount: number }[];
+  payment: {
+    mode: PaymentMode;
+    label: string | null;
+    amount: number;
+    amountReceived: number;
+    changeReturned: number;
+    reference: string | null;
+  };
+  history: { number: number; mode: PaymentMode; amount: number; label: string | null; createdAt: string }[];
+  totals: { total: number; paidBefore: number; paidNow: number; remainingAfter: number };
+}

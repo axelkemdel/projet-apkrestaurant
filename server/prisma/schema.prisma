@@ -70,7 +70,8 @@ model Table {
   zone     String      @default("Salle") // ex : Salle, Terrasse, VIP
   status   TableStatus @default(FREE)
 
-  orders Order[]
+  orders   Order[]
+  payments Payment[]
 }
 
 model Category {
@@ -116,7 +117,7 @@ model Order {
   startedAt    DateTime?
   readyAt      DateTime?
   servedAt     DateTime?
-  paidAt       DateTime?
+  paidAt       DateTime? // addition soldée (le bon peut encore être en cuisine)
 
   table    Table?      @relation(fields: [tableId], references: [id])
   server   User        @relation(fields: [serverId], references: [id])
@@ -129,36 +130,61 @@ model Order {
 }
 
 model OrderItem {
-  id         String  @id @default(cuid())
-  orderId    String
-  menuItemId String
-  name       String // copie du nom au moment de la commande
-  quantity   Int
-  unitPrice  Int // prix de base + suppléments, figé à la commande
-  notes      String? // ex : "sans oignon"
+  id           String  @id @default(cuid())
+  orderId      String
+  menuItemId   String
+  name         String // copie du nom au moment de la commande
+  quantity     Int
+  unitPrice    Int // prix de base + suppléments, figé à la commande
+  notes        String? // ex : "sans oignon"
   // { "cooking": "À point", "side": "Frites", "extras": [{ "name": "Fromage", "price": 500 }] }
-  modifiers  Json?
-  station    Station @default(KITCHEN)
-  paid       Boolean @default(false) // pour le paiement par article (addition séparée)
+  modifiers    Json?
+  station      Station @default(KITCHEN)
+  paidQuantity Int     @default(0) // quantité déjà réglée (paiement par articles)
 
-  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+  order        Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem     MenuItem      @relation(fields: [menuItemId], references: [id])
+  paymentItems PaymentItem[]
 
   @@index([orderId])
 }
 
-// Un même bon peut être soldé en plusieurs paiements (addition partagée)
+// Versement encaissé en caisse. Un versement porte sur une addition : soit
+// l'ensemble des bons ouverts d'une table, soit un bon à emporter. Une addition
+// peut être soldée en plusieurs versements (addition partagée).
 model Payment {
-  id        String      @id @default(cuid())
-  orderId   String
-  cashierId String
-  amount    Int
-  mode      PaymentMode
-  reference String? // n° de transaction Mobile Money
-  createdAt DateTime    @default(now())
+  id             String      @id @default(cuid())
+  number         Int         @default(autoincrement()) // n° de ticket de caisse
+  tableId        String?
+  cashierId      String
+  amount         Int // montant imputé sur l'addition
+  mode           PaymentMode
+  amountReceived Int // espèces remises par le client (= amount hors espèces)
+  changeReturned Int         @default(0)
+  reference      String? // n° de transaction Mobile Money / autorisation CB
+  label          String? // ex : "Part 2/4", "Articles"
+  createdAt      DateTime    @default(now())
 
-  order   Order @relation(fields: [orderId], references: [id])
-  cashier User  @relation(fields: [cashierId], references: [id])
+  table   Table?        @relation(fields: [tableId], references: [id])
+  cashier User          @relation(fields: [cashierId], references: [id])
+  orders  Order[] // bons couverts par ce versement
+  items   PaymentItem[] // articles réglés (paiement par sélection d'articles)
 
-  @@index([orderId])
+  @@index([tableId])
+  @@index([createdAt])
+}
+
+// Détail d'un paiement par articles : quelle quantité de quelle ligne a été réglée
+model PaymentItem {
+  id          String @id @default(cuid())
+  paymentId   String
+  orderItemId String
+  quantity    Int
+  amount      Int
+
+  payment   Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id])
+
+  @@index([paymentId])
+  @@index([orderItemId])
 }

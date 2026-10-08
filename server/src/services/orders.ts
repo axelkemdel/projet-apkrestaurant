@@ -188,11 +188,17 @@ export async function updateOrderStatus(orderId: string, raw: unknown): Promise<
     throw new HttpError(409, `Transition impossible : ${current.status} → ${status}`);
   }
 
+  if (status === "CANCELLED" && (await prisma.payment.count({ where: { orders: { some: { id: orderId } } } }))) {
+    throw new HttpError(409, "Un versement a déjà été encaissé sur ce bon : annulation impossible");
+  }
+
   const field = timestampField[status];
+  // Addition déjà réglée en caisse : une fois servi, le bon est directement soldé.
+  const finalStatus = status === "SERVED" && current.paidAt ? "PAID" : status;
   // Mise à jour conditionnelle : si deux écrans cliquent en même temps, un seul gagne.
   const { count } = await prisma.order.updateMany({
     where: { id: orderId, status: current.status },
-    data: { status, ...(field && { [field]: new Date() }) },
+    data: { status: finalStatus, ...(field && { [field]: new Date() }) },
   });
   if (count === 0) throw new HttpError(409, "La commande a été modifiée entre-temps");
 

@@ -4,6 +4,9 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --color-brand-50: #fff7ed;
   --color-brand-100: #ffedd5;
+  --color-brand-200: #fed7aa;
+  --color-brand-300: #fdba74;
+  --color-brand-400: #fb923c;
   --color-brand-500: #f97316;
   --color-brand-600: #ea580c;
   --color-brand-700: #c2410c;
@@ -24,4 +27,92 @@ body {
 button {
   @apply select-none;
   touch-action: manipulation;
+}
+
+/* -------------------------------------------------------------------------
+   Ticket de caisse — imprimante thermique 80 mm (zone utile ~72 mm)
+   ------------------------------------------------------------------------- */
+.receipt {
+  width: 72mm;
+  margin: 0 auto;
+  padding: 4mm 0;
+  background: #fff;
+  color: #000;
+  font-family: "Courier New", ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.receipt-center {
+  text-align: center;
+}
+.receipt-title {
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.receipt-subtitle {
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.receipt-sep {
+  border: 0;
+  border-top: 1px solid #000;
+  margin: 5px 0;
+}
+.receipt-dashed {
+  border-top-style: dashed;
+}
+.receipt-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.receipt-strong {
+  font-weight: 700;
+  font-size: 13px;
+}
+.receipt-small {
+  font-size: 10.5px;
+}
+.receipt-amount {
+  text-align: right;
+  white-space: nowrap;
+}
+.receipt-lines {
+  width: 100%;
+  border-collapse: collapse;
+}
+.receipt-lines td {
+  vertical-align: top;
+  padding: 1px 0;
+}
+.receipt-qty {
+  width: 8mm;
+  white-space: nowrap;
+}
+
+#print-area {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+  html,
+  body {
+    width: 80mm;
+    height: auto;
+    background: #fff !important;
+  }
+  body > *:not(#print-area) {
+    display: none !important;
+  }
+  #print-area {
+    display: block;
+  }
+  .receipt {
+    padding: 2mm 0 6mm;
+  }
 }

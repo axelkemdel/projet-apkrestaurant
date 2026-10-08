@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { NavLink } from "react-router-dom";
 import { LogOut, Wifi, WifiOff } from "lucide-react";
 import { useAuth } from "../store/auth";
 import { disconnectSocket, useSocketStatus } from "../lib/socket";
@@ -16,6 +17,27 @@ export function AppHeader({ title, children, dark = false }: { title: string; ch
     >
       <span className="rounded-lg bg-brand-500 px-2 py-1 text-sm font-black tracking-tight text-white">RestoApp</span>
       <h1 className="truncate text-base font-semibold">{title}</h1>
+      {user?.role === "ADMIN" && (
+        <nav className="hidden gap-1 md:flex">
+          {[
+            ["/serveur", "Salle"],
+            ["/cuisine", "Cuisine"],
+            ["/caisse", "Caisse"],
+          ].map(([to, label]) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `rounded-lg px-2.5 py-1 text-sm font-medium ${
+                  isActive ? "bg-brand-500 text-white" : dark ? "text-slate-400 hover:bg-slate-800" : "text-slate-500 hover:bg-slate-100"
+                }`
+              }
+            >
+              {label}
+            </NavLink>
+          ))}
+        </nav>
+      )}
       <div className="flex-1" />
       {children}
       <span
