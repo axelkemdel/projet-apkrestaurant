@@ -20,6 +20,8 @@ const { CODESPACE_NAME, GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN } = process.env
 if (CODESPACE_NAME && GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN) {
   const port = process.env.CLIENT_PORT ?? "5173";
   corsOrigin.push(`https://${CODESPACE_NAME}-${port}.${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`);
+  // Le proxy de Codespaces réécrit l'en-tête Origin en https://localhost:<port>
+  corsOrigin.push(`https://localhost:${port}`);
 }
 // Jamais de joker : les cookies de session ne doivent être acceptés que depuis nos propres écrans
 if (corsOrigin.some((o) => o === "*" || o.includes("*"))) {
