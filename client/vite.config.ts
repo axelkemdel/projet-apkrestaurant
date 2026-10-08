@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: true, // accessible depuis les tablettes du réseau local
+    allowedHosts: [".app.github.dev"], // URL transférée par GitHub Codespaces
     proxy: {
       "/api": API,
       "/uploads": API,
