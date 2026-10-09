@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { Lock, LogOut, Wifi, WifiOff } from "lucide-react";
 import { useAuth } from "../store/auth";
 import { useSocketStatus } from "../lib/socket";
-import { lockSession, logout, IDLE_LOCK_MINUTES } from "../lib/session";
+import { autoLogoutApplies, lockSession, logout } from "../lib/session";
+import { LogoutConfirmationModal } from "./LogoutConfirmationModal";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 
@@ -22,6 +23,18 @@ export function AppHeader({
   const { t } = useTranslation();
   const user = useAuth((s) => s.user);
   const connected = useSocketStatus();
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function confirmAndLogout() {
+    setLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setLoggingOut(false);
+      setConfirmLogout(false);
+    }
+  }
 
   return (
     <header
@@ -77,7 +90,7 @@ export function AppHeader({
         </span>
       )}
       <LanguageSwitcher dark={dark} />
-      {user && IDLE_LOCK_MINUTES[user.role] && (
+      {user && autoLogoutApplies(user.role) && (
         <button
           onClick={() => void lockSession()}
           className={`flex h-11 w-11 items-center justify-center rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
@@ -88,13 +101,20 @@ export function AppHeader({
         </button>
       )}
       <button
-        onClick={() => void logout()}
+        // Jamais de déconnexion directe : confirmation d'abord
+        onClick={() => setConfirmLogout(true)}
         className={`flex h-11 w-11 items-center justify-center rounded-lg ${dark ? "hover:bg-slate-800" : "hover:bg-slate-100"}`}
         aria-label={t("common.logout")}
         title={t("common.logout")}
       >
         <LogOut size={18} />
       </button>
+      <LogoutConfirmationModal
+        open={confirmLogout}
+        busy={loggingOut}
+        onCancel={() => setConfirmLogout(false)}
+        onConfirm={() => void confirmAndLogout()}
+      />
     </header>
   );
 }

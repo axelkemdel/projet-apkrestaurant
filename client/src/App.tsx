@@ -1,7 +1,11 @@
-import { useEffect } from "react";
-import { Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useCallback, useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
-import { restoreSession } from "./lib/session";
+import { AUTO_LOGOUT, autoLogoutApplies, logout, restoreSession } from "./lib/session";
+import { refreshSession } from "./lib/api";
+import { useAutoLogout } from "./hooks/useAutoLogout";
+import { InactivityModal } from "./components/InactivityModal";
+import i18n from "./i18n";
 import { IdleLock } from "./components/IdleLock";
 import { useAuth } from "./store/auth";
 import { LoginPage } from "./pages/LoginPage";
@@ -12,7 +16,7 @@ import { KitchenView } from "./pages/KitchenView";
 import { CashierView } from "./pages/CashierView";
 import { AdminView } from "./pages/AdminView";
 import { CustomerTableDashboard } from "./pages/CustomerTableDashboard";
-import { Toaster } from "./components/Toasts";
+import { toast, Toaster } from "./components/Toasts";
 import { ServerNotConfigured } from "./components/ServerNotConfigured";
 import { applyOrientation, initNative, isBundledWithoutServer, redirectingToServer } from "./lib/native";
 
@@ -106,7 +110,48 @@ export function App() {
         <Route path="*" element={<Navigate to={user ? HOME_BY_ROLE[user.role] : "/login"} replace />} />
       </Routes>
       <IdleLock />
+      <AutoLogoutGuard />
       <Toaster />
     </>
+  );
+}
+
+/**
+ * Déconnexion automatique pour inactivité, sur tous les écrans du personnel connectés
+ * (sauf écran cuisine) : avertissement après 4 min, déconnexion 60 s plus tard.
+ */
+function AutoLogoutGuard() {
+  const user = useAuth((s) => s.user);
+  const locked = useAuth((s) => s.locked);
+  const navigate = useNavigate();
+
+  const endSession = useCallback(
+    async (reason: "idle" | "manual") => {
+      await logout(); // POST /api/auth/logout, état local, temps réel et panier nettoyés
+      navigate("/login", { replace: true });
+      if (reason === "idle") toast.info(i18n.t("session.expiredIdle"));
+    },
+    [navigate],
+  );
+
+  const { warningOpen, secondsLeft, stayActive } = useAutoLogout({
+    enabled: Boolean(user && !locked && autoLogoutApplies(user.role)),
+    warnAfterMs: AUTO_LOGOUT.warnAfterMs,
+    countdownSeconds: AUTO_LOGOUT.countdownSeconds,
+    onTimeout: () => void endSession("idle"),
+  });
+
+  return (
+    <InactivityModal
+      open={warningOpen}
+      secondsLeft={secondsLeft}
+      totalSeconds={AUTO_LOGOUT.countdownSeconds}
+      onStay={() => {
+        stayActive();
+        // Prolonge aussi la session côté serveur
+        void refreshSession();
+      }}
+      onLogout={() => void endSession("manual")}
+    />
   );
 }

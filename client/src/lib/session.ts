@@ -5,17 +5,20 @@ import { useCart } from "../store/cart";
 import type { Role, User } from "../types";
 
 /**
- * Verrouillage automatique après inactivité tactile ou clavier (minutes), par rôle.
- * Les écrans cuisine (KDS) sont des affichages muraux permanents que personne ne
- * touche pendant le service : ils ne sont jamais verrouillés (leur session reste
- * bornée à 14 h côté serveur). Le serveur ferme de toute façon une session inactive.
+ * Déconnexion automatique après inactivité (souris, toucher, clavier) : avertissement au
+ * bout de 4 min, déconnexion 60 s plus tard sans réponse (5 min au total).
  */
-export const IDLE_LOCK_MINUTES: Record<Role, number | null> = {
-  ADMIN: 5,
-  CAISSE: 5,
-  SERVEUR: 5,
-  CUISINE: null,
-};
+export const AUTO_LOGOUT = {
+  // Réglables à la compilation pour les essais (VITE_AUTO_LOGOUT_WARN_MS, VITE_AUTO_LOGOUT_COUNTDOWN_S)
+  warnAfterMs: Number(import.meta.env.VITE_AUTO_LOGOUT_WARN_MS) || 4 * 60_000,
+  countdownSeconds: Number(import.meta.env.VITE_AUTO_LOGOUT_COUNTDOWN_S) || 60,
+} as const;
+
+/**
+ * Les écrans cuisine (KDS) sont des affichages muraux permanents que personne ne touche
+ * pendant le service : jamais déconnectés pour inactivité (session bornée à 14 h côté serveur).
+ */
+export const autoLogoutApplies = (role: Role) => role !== "CUISINE";
 
 /** Le jeton d'accès vit 15 min : renouvelé toutes les 12 min tant que l'écran est utilisé. */
 const REFRESH_EVERY_MS = 12 * 60_000;
