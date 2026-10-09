@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
-import { PinPad } from "../components/PinPad";
+import { PIN_MAX_LENGTH, PIN_MIN_LENGTH, PinPad } from "../components/PinPad";
 import { loginWithCredentials } from "../lib/session";
 
 const SHUFFLE_PREF = "restoapp-keypad-shuffle";
@@ -44,7 +44,7 @@ export function LoginPage() {
 
   useEffect(() => usernameRef.current?.focus(), []);
 
-  const canSubmit = username.trim().length >= 3 && pin.length >= 4 && !loading;
+  const canSubmit = username.trim().length >= 3 && pin.length >= PIN_MIN_LENGTH && !loading;
 
   async function submit() {
     if (!canSubmit) return;
@@ -167,6 +167,7 @@ export function LoginPage() {
                 onChange={setPin}
                 onSubmit={() => void submit()}
                 canSubmit={canSubmit}
+                maxLength={PIN_MAX_LENGTH}
                 loading={loading}
                 shuffle={shuffle}
                 shuffleKey={shuffleKey}

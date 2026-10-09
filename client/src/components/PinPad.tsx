@@ -18,7 +18,14 @@ function shuffled(digits: string[]): string[] {
 }
 
 /**
+/** Longueur maximale d'un code PIN (les PIN générés en ont 6 ; le gérant peut en saisir de 4 à 6). */
+export const PIN_MAX_LENGTH = 6;
+/** Longueur minimale acceptée par le serveur. */
+export const PIN_MIN_LENGTH = 4;
+
+/**
  * Pavé de saisie du code PIN (4 à 6 chiffres), contrôlé par le parent.
+ *  - 6 puces affichées ; validation automatique au 6e chiffre, ou par ✓ / Entrée dès 4 ;
  *  - `shuffle` : touches disposées au hasard (anti « shoulder surfing ») ; nouvelle
  *    disposition à chaque changement de `shuffleKey` (ex. après un échec) ;
  *  - chiffres jamais affichés (points), validation par la touche ✓ ou Entrée ;
@@ -28,11 +35,11 @@ export function PinPad({
   value,
   onChange,
   onSubmit,
-  canSubmit = value.length >= 4,
+  canSubmit = value.length >= PIN_MIN_LENGTH,
   loading = false,
   shuffle = false,
   shuffleKey = 0,
-  maxLength = 6,
+  maxLength = PIN_MAX_LENGTH,
   brand = false,
 }: {
   value: string;
@@ -74,18 +81,26 @@ export function PinPad({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Dernier chiffre saisi (pavé tactile ou clavier physique) : validation automatique.
+  // Déclenchée par la saisie du chiffre seulement — pas quand `ready` change ensuite
+  // (ex. identifiant complété après le PIN : l'utilisateur valide alors lui-même).
+  useEffect(() => {
+    const s = latest.current;
+    if (value.length === s.maxLength && s.ready) s.onSubmit();
+  }, [value]);
+
   const press = (d: string) => value.length < maxLength && onChange(value + d);
   const digitClass = brand ? "bg-orange-600 hover:bg-orange-500 shadow-lg shadow-orange-600/30" : "";
 
   return (
     <div className="mx-auto w-full max-w-xs">
-      <div className="mb-5 flex justify-center gap-3" aria-live="polite" aria-label={t("pin.digits", { count: value.length })}>
-        {Array.from({ length: Math.max(4, value.length) }, (_, i) => (
+      <div className="mb-5 flex justify-center gap-2 sm:gap-2.5" aria-live="polite" aria-label={t("pin.digits", { count: value.length })}>
+        {Array.from({ length: maxLength }, (_, i) => (
           <motion.span
             key={i}
             initial={false}
             animate={{ scale: i < value.length ? 1.15 : 1 }}
-            className={`h-4 w-4 rounded-full ${i < value.length ? "bg-brand-500" : brand ? "bg-slate-600/80" : "bg-slate-700"}`}
+            className={`h-3.5 w-3.5 shrink-0 rounded-full sm:h-4 sm:w-4 ${i < value.length ? "bg-brand-500" : brand ? "bg-slate-600/80" : "bg-slate-700"}`}
           />
         ))}
       </div>
