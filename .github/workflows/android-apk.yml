@@ -62,3 +62,67 @@ jobs:
           path: client/android/app/build/outputs/apk/debug/*.apk
           retention-days: 14
           if-no-files-found: error
+
+  # APK de production signé (client/scripts/build-signed-apk.sh). Avec les secrets de dépôt
+  # THAONI_KEYSTORE_BASE64 (base64 -w0 thaoni-release-key.jks) et THAONI_KEYSTORE_PASSWORD,
+  # l'APK signé avec la vraie clé est publié en artifact. Sans eux, la chaîne complète est
+  # vérifiée avec une clé jetable et rien n'est publié.
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.THAONI_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.THAONI_KEYSTORE_PASSWORD }}
+        run: |
+          ks="$RUNNER_TEMP/thaoni-release-key.jks"
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$ks"
+            echo "real=true" >> "$GITHUB_OUTPUT"
+            pass="$KEYSTORE_PASSWORD"
+          else
+            echo "::notice title=Clé jetable::Secrets THAONI_KEYSTORE_* absents : signature vérifiée avec une clé jetable, APK non publié."
+            pass="$(openssl rand -hex 24)"
+            THAONI_KEYSTORE="$ks" THAONI_KEYSTORE_PASSWORD="$pass" THAONI_DNAME="CN=THAONI APP CI" bash client/scripts/create-keystore.sh
+            echo "real=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "::add-mask::$pass"
+          echo "THAONI_KEYSTORE=$ks" >> "$GITHUB_ENV"
+          echo "THAONI_KEYSTORE_PASSWORD=$pass" >> "$GITHUB_ENV"
+
+      - name: Compilation et signature
+        env:
+          CAP_SERVER_URL: ${{ inputs.server_url || vars.CAP_SERVER_URL || 'https://thaoni.example.invalid' }}
+          THAONI_VERSION_CODE: ${{ github.run_number }}
+          # Contrôle de la chaîne avec clé jetable : une adresse http (serveur local) est tolérée
+          THAONI_ALLOW_HTTP: ${{ steps.keystore.outputs.real != 'true' }}
+        run: bash client/scripts/build-signed-apk.sh
+
+      - if: steps.keystore.outputs.real == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: thaoni-release-signed-apk
+          path: client/android/app/build/outputs/apk/release/app-release-signed.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Effacement du keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/thaoni-release-key.jks"

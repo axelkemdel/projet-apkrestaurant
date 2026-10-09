@@ -22,6 +22,10 @@ const HOURS = Object.entries(HOUR_WEIGHTS).flatMap(([h, w]) => Array(w).fill(Num
 const MODES: PaymentMode[] = ["CASH", "CASH", "CASH", "CASH", "ORANGE_MONEY", "ORANGE_MONEY", "ORANGE_MONEY", "CARD", "TELECEL_CASH", "TELECEL_CASH"];
 
 async function main() {
+  // Ventes fictives : jamais dans une base de production
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_SEED !== "true") {
+    throw new Error("Historique de démonstration refusé en production.");
+  }
   const [items, tables, servers, cashier] = await Promise.all([
     prisma.menuItem.findMany({ where: { isArchived: false }, include: { category: true } }),
     prisma.table.findMany(),

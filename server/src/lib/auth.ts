@@ -66,7 +66,7 @@ function sameHash(a: string, b: string | null | undefined) {
   return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-const baseCookie = () => ({ httpOnly: true, sameSite: "strict" as const, secure: env.cookieSecure });
+const baseCookie = () => ({ httpOnly: true, sameSite: env.cookieSameSite, secure: env.cookieSecure });
 
 function signAccess(user: { id: string; sessionVersion: number }, sessionId: string) {
   const claims: Omit<AccessClaims, "sub"> = { sid: sessionId, sv: user.sessionVersion, typ: "access" };

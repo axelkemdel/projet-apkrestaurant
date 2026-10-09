@@ -127,6 +127,7 @@ ok(statuses.filter((s) => s === 201).length === 5 && statuses.slice(5).every((s)
 // --- En-têtes ----------------------------------------------------------------------
 const page = await fetch(`${BASE}/`);
 const csp = page.headers.get("content-security-policy") ?? "";
+ok(page.headers.get("x-frame-options") === "DENY" && (await fetch(`${API}/health`)).headers.get("x-frame-options") === "DENY", "X-Frame-Options: DENY (interface et API)");
 ok(page.status !== 200 || (/connect-src 'self'(;|$)/.test(csp) && !/ws:|wss:/.test(csp)), "CSP interface : connexions vers le site uniquement");
 
 await db.$disconnect();

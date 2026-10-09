@@ -13,6 +13,12 @@
     "db:setup": "npm run db:migrate -w server && npm run db:seed -w server",
     "cap:build": "npm run cap:build -w client",
     "cap:open": "npm run cap:open -w client",
-    "apk:debug": "npm run apk:debug -w client"
+    "apk:debug": "npm run apk:debug -w client",
+    "build:prod": "CI=true npm run build",
+    "start:prod": "npm run start:prod -w server",
+    "db:deploy": "npm run db:deploy -w server",
+    "pins:reset": "npm run pins:reset -w server --",
+    "keystore:create": "bash client/scripts/create-keystore.sh",
+    "apk:release": "npm run cap:release -w client"
   }
 }

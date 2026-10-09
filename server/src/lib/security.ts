@@ -14,17 +14,34 @@ import { HttpError } from "./errors.js";
  */
 const NATIVE_APP_ORIGINS = new Set(["capacitor://localhost", "https://localhost", "http://localhost"]);
 
-/** Origine de confiance connue : CORS_ORIGIN, application mobile, ou ce Codespace (tous ports). */
+/**
+ * Origine de confiance connue : CORS_ORIGIN, application mobile, ou ce Codespace (tous ports).
+ * En production, seule la liste CORS_ORIGIN fait foi (aucune origine localhost implicite).
+ */
 export function isTrustedOrigin(origin: string): boolean {
-  return env.corsOrigin.includes(origin) || NATIVE_APP_ORIGINS.has(origin) || Boolean(env.codespaceOrigin?.test(origin));
+  if (env.corsOrigin.includes(origin)) return true;
+  if (env.isProduction) return false;
+  return NATIVE_APP_ORIGINS.has(origin) || Boolean(env.codespaceOrigin?.test(origin));
 }
 
 /** Origine autorisée : origine de confiance, ou même hôte que le serveur (accès direct / proxy). */
 const isLoopback = (address: string | undefined) => !!address && /^(::1|127\.|::ffff:127\.)/.test(address);
 
-/** X-Forwarded-Host n'est cru que s'il vient d'un proxy local (Vite, proxy de Codespaces). */
+/**
+ * La connexion vient-elle d'un proxy de confiance ? Proxy local (Vite, Codespaces) toujours ;
+ * proxy distant seulement si TRUST_PROXY le déclare (Railway : TRUST_PROXY=1, plateforme
+ * dont le conteneur n'est joignable que par son proxy).
+ */
+export function fromTrustedProxy(remoteAddress: string | undefined) {
+  return isLoopback(remoteAddress) || env.trustProxy === true || (typeof env.trustProxy === "number" && env.trustProxy > 0);
+}
+
+/** Nombre de proxys dont les adresses ajoutées à X-Forwarded-For sont crues. */
+export const proxyHops = () => (typeof env.trustProxy === "number" && env.trustProxy > 0 ? env.trustProxy : 1);
+
+/** X-Forwarded-Host n'est cru que s'il vient d'un proxy de confiance. */
 export function forwardedHostOf(remoteAddress: string | undefined, header: string | string[] | undefined) {
-  return isLoopback(remoteAddress) ? header : undefined;
+  return fromTrustedProxy(remoteAddress) ? header : undefined;
 }
 
 export function isAllowedOrigin(origin: string, host: string | undefined, forwardedHost?: string | string[]) {
@@ -62,6 +79,8 @@ export function applySecurity(app: Express) {
       contentSecurityPolicy: { directives: { defaultSrc: ["'none'"], frameAncestors: ["'none'"], imgSrc: ["'self'"] } },
       // Les images /uploads sont affichées par le front (même site, éventuellement autre port)
       crossOriginResourcePolicy: { policy: "same-site" },
+      // Aucune page de l'application ne doit être intégrée dans un cadre (anti clickjacking)
+      frameguard: { action: "deny" },
     }),
   );
   app.use(

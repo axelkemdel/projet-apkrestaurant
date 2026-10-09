@@ -7,7 +7,10 @@ import multer from "multer";
 import { HttpError } from "./errors.js";
 
 /** Racine des fichiers téléversés, servie en statique sous `/uploads`. */
-export const UPLOADS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../uploads");
+// UPLOADS_DIR : volume persistant en production (Railway : le disque du conteneur est effacé à chaque déploiement)
+export const UPLOADS_DIR = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../uploads");
 const DISHES_DIR = path.join(UPLOADS_DIR, "dishes");
 const DISHES_URL = "/uploads/dishes/";
 mkdirSync(DISHES_DIR, { recursive: true });

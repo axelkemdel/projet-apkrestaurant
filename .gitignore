@@ -1,6 +1,16 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
+!.env.production.example
 *.log
 .DS_Store
 *.tsbuildinfo
+
+# Signature Android : clés et APK signés jamais commités
+*.jks
+*.keystore
+*-signed.apk
+# Récapitulatifs de PIN générés par server/scripts/reset-demo-pins.ts
+thaoni-pins-*.txt

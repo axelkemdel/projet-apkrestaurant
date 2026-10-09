@@ -5,7 +5,7 @@ import { env } from "./lib/env.js";
 import { z } from "zod";
 import { parseCookie } from "cookie";
 import { ACCESS_COOKIE, authenticate, revokeSession, type AuthUser } from "./lib/auth.js";
-import { forwardedHostOf, idSchema, isAllowedOrigin, isTrustedOrigin } from "./lib/security.js";
+import { forwardedHostOf, fromTrustedProxy, idSchema, proxyHops, isAllowedOrigin, isTrustedOrigin } from "./lib/security.js";
 import type { Actor } from "./lib/audit.js";
 import { HttpError, toErrorPayload } from "./lib/errors.js";
 import { prisma } from "./lib/prisma.js";
@@ -101,13 +101,12 @@ interface SocketData {
   lang: Lang;
 }
 
-/** IP de l'appareil : X-Forwarded-For seulement si la connexion vient d'un proxy local (cf. TRUST_PROXY). */
+/** IP de l'appareil : X-Forwarded-For seulement si la connexion vient d'un proxy de confiance (cf. TRUST_PROXY). */
 function clientIp(socket: { handshake: { address: string; headers: Record<string, string | string[] | undefined> } }) {
   const direct = socket.handshake.address;
   const forwarded = socket.handshake.headers["x-forwarded-for"];
-  const isLoopback = /^(::1|127\.|::ffff:127\.)/.test(direct);
-  // Adresse ajoutée par NOTRE proxy = la dernière de la liste (les précédentes sont falsifiables)
-  if (isLoopback && typeof forwarded === "string") return forwarded.split(",").at(-1)?.trim() || direct;
+  // Adresses ajoutées par NOS proxys = les dernières de la liste (les précédentes sont falsifiables)
+  if (fromTrustedProxy(direct) && typeof forwarded === "string") return forwarded.split(",").at(-proxyHops())?.trim() || direct;
   return direct;
 }
 

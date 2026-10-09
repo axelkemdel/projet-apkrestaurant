@@ -30,9 +30,9 @@ const config: CapacitorConfig = {
     androidScheme: "https",
     ...(server && {
       url: server.url,
-      // HTTP en clair permis (serveur du réseau local sans certificat) ; la configuration réseau
-      // Android générée le limite de toute façon à l'hôte de ce serveur
-      cleartext: true,
+      // HTTP en clair permis seulement pour un serveur du réseau local sans certificat (la
+      // configuration réseau Android générée le limite à cet hôte) ; jamais en HTTPS (production)
+      cleartext: server.url.startsWith("http:"),
       // L'interface embarquée peut rediriger vers ce serveur, et seulement lui
       allowNavigation: [new URL(server.url).hostname],
     }),

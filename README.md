@@ -347,9 +347,43 @@ Audit complet (authentification, RBAC, injections, Socket.io, en-têtes, limites
 | Faible | Socket ouvert prolongeant une session inactive | Inactivité revérifiée toutes les 60 s (sauf cuisine) |
 | Faible | Dernier gérant : vérification hors transaction | Vérification dans la transaction, gérants verrouillés |
 
-**Risques acceptés / recommandations** : servir en HTTPS (`COOKIE_SECURE=true`) ; changer le mot de passe PostgreSQL et utiliser un rôle sans droit `TRUNCATE` en production ; changer les PIN de démonstration ; signer l'APK de production (la CI produit un APK *debug*) ; l'origine `http://localhost` reste autorisée (application Android) ; la cuisine peut annuler un bon (prévu, tracé).
+**Risques acceptés** — levés par la procédure de mise en production ci-dessous : HTTPS et cookies `Secure` imposés en production, PostgreSQL Railway au mot de passe fort et non publié, PIN de démonstration remplacés (`pins:reset`), APK de production signé, aucune origine `localhost` implicite en production. Reste, par conception : la cuisine peut annuler un bon (tracé au journal).
 
 **Vérification** — `npm run test:hardening -w server` (24 vérifications).
+
+## Mise en production (Railway)
+
+**Garde-fous du serveur en `NODE_ENV=production`** — il refuse de démarrer si `JWT_SECRET` est faible, si `COOKIE_SECURE=false`, si `COOKIE_SAMESITE` n'est ni `strict` ni `lax`, si `CORS_ORIGIN` est absente ou contient une origine non HTTPS (hors `capacitor://localhost`). Aucune origine `localhost` n'est acceptée implicitement. Le seed de démonstration (`db:seed`, `db:seed:demo`) est refusé. En-têtes : HSTS, CSP, `X-Frame-Options: DENY`, `nosniff`.
+
+**1. Base et service**
+1. Railway → *New Project* → *Deploy from GitHub repo* (ce dépôt), puis *+ New* → *Database* → *PostgreSQL* (mot de passe fort généré, base joignable uniquement par le réseau privé).
+2. Service THAONI APP : laisser le *Root Directory* à la racine du dépôt. `railway.json` définit le build (`npm ci --include=dev && CI=true npm run build` : client + serveur) et le démarrage (`prisma migrate deploy` puis `node dist/index.js`, sur le `PORT` fourni par Railway), avec contrôle de santé `/api/health`. `server/Procfile` contient la même commande, pour un service dont la racine est `server/`.
+3. *Variables* → *Raw Editor* : coller `server/.env.production.example`, puis `DATABASE_URL=${{Postgres.DATABASE_URL}}` et `JWT_SECRET` = résultat de `openssl rand -hex 64`.
+4. *Settings* → *Networking* → *Generate Domain* ; reporter l'adresse dans `CORS_ORIGIN` (`https://<domaine>,capacitor://localhost`).
+5. *+ New* → *Volume* monté sur `/data` (photos des plats, `UPLOADS_DIR=/data/uploads`).
+
+**2. Premiers comptes** — depuis un poste de confiance, avec l'URL publique de la base (`DATABASE_PUBLIC_URL` du service PostgreSQL), une seule fois sur une base vide :
+
+```bash
+export DATABASE_URL="postgresql://…"                       # DATABASE_PUBLIC_URL
+NODE_ENV=production ALLOW_DEMO_SEED=true npm run db:seed -w server   # carte, tables et comptes de départ
+NODE_ENV=production npm run pins:reset -- --all --confirm            # PIN aléatoires à 6 chiffres
+```
+
+`server/scripts/reset-demo-pins.ts` détecte les PIN faibles (0000, 1111, 1234…, sans `--all`) en les comparant aux hachages, attribue à chaque compte un PIN unique à 6 chiffres (haché bcrypt, coût 12), ferme ses sessions et trace `PIN_RESET` au journal. Les PIN s'affichent une fois et sont écrits dans `~/thaoni-pins-<date>.txt` (droits 600, hors dépôt) : les remettre en main propre puis `shred -u` le fichier. `--dry-run` simule.
+
+**3. APK de production signé**
+
+```bash
+npm run keystore:create          # une seule fois : ~/.thaoni/thaoni-release-key.jks (alias thaoni-alias)
+CAP_SERVER_URL=https://<domaine-railway> THAONI_VERSION_CODE=2 npm run apk:release
+```
+
+`keystore:create` exécute `keytool -genkey -v -keystore thaoni-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias thaoni-alias` et refuse d'écraser un keystore existant. **Sauvegarder le keystore et son mot de passe hors de la machine** : sans eux, plus aucune mise à jour de l'application installée n'est possible. `apk:release` (`client/scripts/build-signed-apk.sh`) : `vite build` → `npx cap sync android` → `./gradlew assembleRelease` → `zipalign` → `apksigner` (mot de passe demandé ou `THAONI_KEYSTORE_PASSWORD`, jamais affiché) → vérification. Résultat : `client/android/app/build/outputs/apk/release/app-release-signed.apk`. Adresse HTTPS obligatoire ; `THAONI_VERSION_CODE` à incrémenter à chaque publication.
+
+Sans SDK Android local, GitHub Actions compile l'APK signé : secrets de dépôt `THAONI_KEYSTORE_BASE64` (`base64 -w0 ~/.thaoni/thaoni-release-key.jks`) et `THAONI_KEYSTORE_PASSWORD`, variable `CAP_SERVER_URL` ; artifact `thaoni-release-signed-apk`. Sans ces secrets, la chaîne est vérifiée avec une clé jetable et rien n'est publié.
+
+`.gitignore` exclut `*.jks`, `*.keystore`, `*-signed.apk`, `.env.*` (hors modèles) et les récapitulatifs de PIN.
 
 ## Application Android (Capacitor)
 

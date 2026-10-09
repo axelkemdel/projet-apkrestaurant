@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
@@ -13,6 +13,8 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "db:seed:demo": "tsx prisma/seed-demo.ts",
+    "pins:reset": "tsx scripts/reset-demo-pins.ts",
+    "start:prod": "prisma migrate deploy && node dist/index.js",
     "test:security": "node tests/security.e2e.mjs",
     "test:i18n": "node tests/i18n.e2e.mjs",
     "test:portal": "node tests/portal.e2e.mjs",
@@ -34,6 +36,7 @@
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
+    "prisma": "^6.19.3",
     "socket.io": "^4.8.4",
     "zod": "^3.25.76"
   },
@@ -44,7 +47,6 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^2.3.0",
     "@types/node": "^26.6.4",
-    "prisma": "^6.19.3",
     "socket.io-client": "^4.8.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
