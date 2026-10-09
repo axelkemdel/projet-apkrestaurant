@@ -32,7 +32,11 @@ export const loginKey = (username: unknown) => `login:${String(username ?? "").t
  *  - par identifiant : LOGIN_MAX_ATTEMPTS_ACCOUNT (5) essais, quelle que soit la tablette ;
  *  - par appareil (IP) : LOGIN_MAX_ATTEMPTS_IP (10) essais, tous identifiants confondus —
  *    un peu plus large car les tablettes d'un restaurant sortent souvent par la même IP.
- * Message identique dans les deux cas : il ne révèle pas si l'identifiant existe.
+ *  - par identifiant sur 24 h : LOGIN_MAX_ATTEMPTS_ACCOUNT_DAILY (20) essais. Sans ce
+ *    second palier, 5 essais / 5 min laisseraient ~1 400 essais par jour, de quoi épuiser
+ *    un PIN à 4 chiffres en une semaine ; avec lui, il faudrait des années.
+ * Message identique dans tous les cas : il ne révèle pas si l'identifiant existe.
+ * Le gérant lève le blocage en réinitialisant le PIN de l'employé.
  */
 export function createLoginLimiters(onAccountLocked: (req: Request) => void) {
   const perAccount = rateLimit({
@@ -46,6 +50,17 @@ export function createLoginLimiters(onAccountLocked: (req: Request) => void) {
       sendError(req, res, options.statusCode, "auth.tooManyAttempts");
     },
   });
+  const perAccountDaily = rateLimit({
+    ...common,
+    windowMs: 24 * 3_600_000,
+    limit: env.loginMaxAttemptsAccountDaily,
+    skipSuccessfulRequests: true,
+    keyGenerator: (req) => `daily:${loginKey(req.body?.username)}`,
+    handler: (req, res, _next, options) => {
+      onAccountLocked(req);
+      sendError(req, res, options.statusCode, "auth.tooManyAttempts");
+    },
+  });
   const perIp = rateLimit({
     ...common,
     windowMs: LOGIN_WINDOW_MS,
@@ -54,7 +69,7 @@ export function createLoginLimiters(onAccountLocked: (req: Request) => void) {
     keyGenerator: ip,
     handler: (req, res, _next, options) => sendError(req, res, options.statusCode, "auth.tooManyAttempts"),
   });
-  return { perAccount, perIp };
+  return { perAccount, perAccountDaily, perIp };
 }
 
 /** Rafraîchissement de session : largement suffisant pour un usage normal (1 / 15 min par écran). */

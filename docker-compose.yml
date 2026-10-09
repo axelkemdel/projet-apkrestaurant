@@ -7,7 +7,9 @@ services:
       POSTGRES_PASSWORD: resto
       POSTGRES_DB: restoapp
     ports:
-      - "5432:5432"
+      # Port publié sur la boucle locale uniquement : la base n'est jamais exposée au réseau.
+      # Changez POSTGRES_PASSWORD (et DATABASE_URL) hors poste de développement.
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 

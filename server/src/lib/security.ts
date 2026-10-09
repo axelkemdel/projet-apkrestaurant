@@ -20,6 +20,13 @@ export function isTrustedOrigin(origin: string): boolean {
 }
 
 /** Origine autorisée : origine de confiance, ou même hôte que le serveur (accès direct / proxy). */
+const isLoopback = (address: string | undefined) => !!address && /^(::1|127\.|::ffff:127\.)/.test(address);
+
+/** X-Forwarded-Host n'est cru que s'il vient d'un proxy local (Vite, proxy de Codespaces). */
+export function forwardedHostOf(remoteAddress: string | undefined, header: string | string[] | undefined) {
+  return isLoopback(remoteAddress) ? header : undefined;
+}
+
 export function isAllowedOrigin(origin: string, host: string | undefined, forwardedHost?: string | string[]) {
   if (isTrustedOrigin(origin)) return true;
   let originHost: string;
@@ -43,7 +50,7 @@ export function isAllowedOrigin(origin: string, host: string | undefined, forwar
 const originCheck: RequestHandler = (req, _res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
   const origin = req.headers.origin;
-  if (origin && !isAllowedOrigin(origin, req.headers.host, req.headers["x-forwarded-host"])) throw new HttpError(403, "http.originNotAllowed");
+  if (origin && !isAllowedOrigin(origin, req.headers.host, forwardedHostOf(req.socket.remoteAddress, req.headers["x-forwarded-host"]))) throw new HttpError(403, "http.originNotAllowed");
   next();
 };
 
@@ -74,7 +81,19 @@ export function applySecurity(app: Express) {
 // Validation stricte des paramètres d'URL
 // ---------------------------------------------------------------------------
 
+/** Plafond des montants (FCFA) : reste loin de la limite des colonnes INT 32 bits (2 147 483 647). */
+export const MAX_AMOUNT = 1_000_000_000;
+
 export const idSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/, "http.invalidId");
+
+/** Jour calendaire AAAA-MM-JJ réellement existant (2026-02-31 refusé), années 2000-2099. */
+export const daySchema = z
+  .string()
+  .regex(/^20\d{2}-\d{2}-\d{2}$/, "validation.dateFormat")
+  .refine((d) => {
+    const parsed = new Date(`${d}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === d;
+  }, "validation.dateInvalid");
 
 /** Valide les paramètres d'identifiant d'un routeur (`:id`, `:tableId`…) avant tout accès base. */
 export function validateIdParams(router: Router, ...names: string[]) {

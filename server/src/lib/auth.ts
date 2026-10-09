@@ -201,14 +201,24 @@ export async function refreshSession(res: Response, cookieValue: unknown): Promi
     setAccessCookie(res, signAccess(session.user, session.id));
     return { user: toAuthUser(session.user), sessionId: session.id };
   }
+  // Seul un ANCIEN jeton authentique de cette session prouve un vol : un secret quelconque
+  // accolé à un identifiant de session connu ne doit pas permettre de couper la session d'autrui
+  if (!sameHash(presented, session.previousHash)) return fail();
   await revokeSession(session.id, "refresh_token_reuse");
   return { error: new HttpError(401, "auth.expired"), reuse: { userId: session.userId, sessionId: session.id } };
 }
 
-/** Session désignée par la requête (cookie de rafraîchissement, sinon jeton d'accès même expiré). */
-export function sessionIdOf(req: Request): string | null {
+/**
+ * Session désignée par la requête, PROUVÉE : cookie de rafraîchissement dont le secret
+ * correspond (actuel ou précédent), sinon jeton d'accès signé (même expiré).
+ */
+export async function sessionIdOf(req: Request): Promise<string | null> {
   const fromRefresh = parseRefreshCookie(req.cookies?.[REFRESH_COOKIE]);
-  if (fromRefresh) return fromRefresh.sessionId;
+  if (fromRefresh) {
+    const session = await prisma.authSession.findUnique({ where: { id: fromRefresh.sessionId }, select: { tokenHash: true, previousHash: true } });
+    const presented = sha256(fromRefresh.secret);
+    if (session && (sameHash(presented, session.tokenHash) || sameHash(presented, session.previousHash))) return fromRefresh.sessionId;
+  }
   const token = req.cookies?.[ACCESS_COOKIE];
   if (typeof token !== "string") return null;
   try {

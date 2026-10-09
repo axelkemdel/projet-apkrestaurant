@@ -186,7 +186,8 @@ Règles :
 **Personnel & sécurité**
 - Les codes PIN sont **hachés (bcrypt)** : ni la base ni l'API ne peuvent les relire. Ils s'affichent une seule fois, à la création ou à la réinitialisation, pour être transmis à l'employé.
 - Réinitialiser le PIN, changer le rôle ou désactiver un employé **ferme immédiatement ses sessions** (jeton invalidé via `User.sessionVersion`, connexions temps réel coupées).
-- Anti force brute : 5 codes erronés sur un profil le verrouillent 5 minutes (levé par une réinitialisation du PIN).
+- Anti force brute : 5 codes erronés en 5 min ou 20 en 24 h bloquent l'identifiant (levé par une réinitialisation du PIN). Les PIN générés ont 6 chiffres.
+- Réinitialiser **son propre** PIN garde la session de l'appareil utilisé mais ferme toutes les autres.
 - Un gérant ne peut pas retirer son propre accès, et il reste toujours au moins un gérant actif.
 
 ## Sécurité & anti-fraude (Module 4)
@@ -216,7 +217,7 @@ Règles :
 
 **Vérification** — `npm run test:security -w server` (API démarrée, base de démo fraîche) rejoue 37 contrôles de bout en bout sur ces protocoles.
 
-**Déploiement** — le cookie `Secure` exige HTTPS : en production, servir l'application derrière un proxy TLS (Caddy, Nginx…). `localhost` est accepté en développement ; pour tester depuis une tablette en `http://IP-locale`, mettre `COOKIE_SECURE=false` (avertissement au démarrage) et ajouter l'origine à `CORS_ORIGIN`. Remplacer `JWT_SECRET` par une valeur aléatoire (refusé en production si trop courte).
+**Déploiement** — le cookie `Secure` exige HTTPS : en production, servir l'application derrière un proxy TLS (Caddy, Nginx…). `localhost` est accepté en développement ; pour tester depuis une tablette en `http://IP-locale`, mettre `COOKIE_SECURE=false` (avertissement au démarrage) et ajouter l'origine à `CORS_ORIGIN`. Remplacer `JWT_SECRET` par une valeur aléatoire d'au moins 32 caractères : une valeur faible est refusée en production et remplacée ailleurs par un secret temporaire (sessions perdues au redémarrage).
 
 ## Interface responsive
 
@@ -322,6 +323,33 @@ L'adresse encodée est celle depuis laquelle l'administration est ouverte, ou `V
 **Migration** — `20261010090000_zero_trust_auth` : identifiant dérivé du nom pour les comptes existants (ex. « Awa (serveuse) » → `awaserveuse`, modifiable par le gérant), table `AuthSession`, nouvelles actions d'audit.
 
 **Vérification** — `npm run test:auth -w server` (52 vérifications ; API démarrée, base de démo fraîche).
+
+## Audit de sécurité (octobre 2026)
+
+Audit complet (authentification, RBAC, injections, Socket.io, en-têtes, limites de débit, secrets, erreurs et journal). Aucune faille critique ; correctifs appliqués :
+
+| Gravité | Constat | Correctif |
+| --- | --- | --- |
+| Élevée | PostgreSQL publié sur toutes les interfaces avec `resto/resto` | `docker-compose.yml` : port lié à `127.0.0.1` uniquement |
+| Élevée | PIN 4 chiffres : ~1 400 essais / jour possibles | Second palier 20 échecs / 24 h par identifiant (`LOGIN_MAX_ATTEMPTS_ACCOUNT_DAILY`), PIN générés à 6 chiffres |
+| Moyenne | `JWT_SECRET` faible accepté hors `NODE_ENV=production` | Secret faible refusé en production, remplacé ailleurs par un secret aléatoire temporaire |
+| Moyenne | Plats (disponibilité, options, catégorie…), catégories et tables modifiés sans trace | Actions `MENU_ITEM_UPDATED`, `MENU_CATEGORY_CHANGED`, `TABLE_CHANGED` (ancien → nouveau) |
+| Moyenne | QR code photographié : commandes en rafale en changeant d'IP | 5 bons clients en attente maximum par table |
+| Moyenne | Annulation d'un bon pendant son encaissement ; bon ajouté pendant la clôture | Même verrou de ligne (`FOR UPDATE`) que la caisse |
+| Moyenne | Réinitialiser son propre PIN laissait ses autres sessions ouvertes | Autres sessions révoquées, appareil courant conservé |
+| Moyenne | Seed de démonstration exécutable en production | Refusé si `NODE_ENV=production` |
+| Faible | Identifiant de session + secret forgé : révocation / déconnexion de la session d'autrui | Seul un ancien jeton authentique déclenche la révocation ; la déconnexion exige une session prouvée |
+| Faible | JSON illisible, corps trop gros, élément supprimé entre-temps → 500 | 400 / 413 / 404 / 409 traduits, sans détail technique |
+| Faible | Dates impossibles (31 février), montants hors bornes INT → 500 | Validation calendaire, plafond 1 000 000 000 |
+| Faible | Images de plats en `http://` | `https://` uniquement (cohérent avec la CSP) |
+| Faible | CSP interface `connect-src ws: wss:` | `connect-src 'self'` |
+| Faible | `X-Forwarded-Host` / `X-Forwarded-For` falsifiables | Crus seulement depuis le proxy local ; IP = dernière adresse ajoutée |
+| Faible | Socket ouvert prolongeant une session inactive | Inactivité revérifiée toutes les 60 s (sauf cuisine) |
+| Faible | Dernier gérant : vérification hors transaction | Vérification dans la transaction, gérants verrouillés |
+
+**Risques acceptés / recommandations** : servir en HTTPS (`COOKIE_SECURE=true`) ; changer le mot de passe PostgreSQL et utiliser un rôle sans droit `TRUNCATE` en production ; changer les PIN de démonstration ; signer l'APK de production (la CI produit un APK *debug*) ; l'origine `http://localhost` reste autorisée (application Android) ; la cuisine peut annuler un bon (prévu, tracé).
+
+**Vérification** — `npm run test:hardening -w server` (24 vérifications).
 
 ## Application Android (Capacitor)
 

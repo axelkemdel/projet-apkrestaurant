@@ -4,8 +4,8 @@ import type { Table } from "@prisma/client";
 import { env } from "./lib/env.js";
 import { z } from "zod";
 import { parseCookie } from "cookie";
-import { ACCESS_COOKIE, authenticate, type AuthUser } from "./lib/auth.js";
-import { idSchema, isAllowedOrigin, isTrustedOrigin } from "./lib/security.js";
+import { ACCESS_COOKIE, authenticate, revokeSession, type AuthUser } from "./lib/auth.js";
+import { forwardedHostOf, idSchema, isAllowedOrigin, isTrustedOrigin } from "./lib/security.js";
 import type { Actor } from "./lib/audit.js";
 import { HttpError, toErrorPayload } from "./lib/errors.js";
 import { prisma } from "./lib/prisma.js";
@@ -106,7 +106,8 @@ function clientIp(socket: { handshake: { address: string; headers: Record<string
   const direct = socket.handshake.address;
   const forwarded = socket.handshake.headers["x-forwarded-for"];
   const isLoopback = /^(::1|127\.|::ffff:127\.)/.test(direct);
-  if (isLoopback && typeof forwarded === "string") return forwarded.split(",")[0].trim();
+  // Adresse ajoutée par NOTRE proxy = la dernière de la liste (les précédentes sont falsifiables)
+  if (isLoopback && typeof forwarded === "string") return forwarded.split(",").at(-1)?.trim() || direct;
   return direct;
 }
 
@@ -200,9 +201,15 @@ async function revalidateSockets() {
   if (ids.length === 0) return;
   const valid = await prisma.authSession.findMany({
     where: { id: { in: ids }, revokedAt: null, expiresAt: { gt: new Date() }, user: { isActive: true } },
-    select: { id: true },
+    select: { id: true, lastUsedAt: true, user: { select: { role: true } } },
   });
-  const ok = new Set(valid.map((v) => v.id));
+  // Une connexion temps réel ne prolonge pas une session inactive (sauf écrans cuisine)
+  const idleBefore = Date.now() - env.sessionIdleMinutes * 60_000;
+  for (const v of valid) {
+    if (v.user.role !== "CUISINE" && v.lastUsedAt.getTime() < idleBefore) await revokeSession(v.id, "idle");
+  }
+  const active = valid.filter((v) => v.user.role === "CUISINE" || v.lastUsedAt.getTime() >= idleBefore);
+  const ok = new Set(active.map((v) => v.id));
   for (const id of ids) if (!ok.has(id)) disconnectSession(id);
 }
 
@@ -293,7 +300,7 @@ export function initRealtime(httpServer: HttpServer): IO {
     // Anti « cross-site WebSocket hijacking » : origine vérifiée avant le handshake
     allowRequest: (req, cb) => {
       const origin = req.headers.origin;
-      cb(null, !origin || isAllowedOrigin(origin, req.headers.host, req.headers["x-forwarded-host"]));
+      cb(null, !origin || isAllowedOrigin(origin, req.headers.host, forwardedHostOf(req.socket.remoteAddress, req.headers["x-forwarded-host"])));
     },
   });
 

@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { AuditAction, type Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
-import { idSchema } from "../lib/security.js";
+import { daySchema, idSchema } from "../lib/security.js";
 
 
-const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "validation.dateFormat");
+const day = daySchema;
 
 const querySchema = z
   .object({

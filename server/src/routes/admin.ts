@@ -18,7 +18,7 @@ import {
 import { createUser, createUserSchema, listUsers, resetPin, updateUser, updateUserSchema } from "../services/adminUsers.js";
 import { validateBody } from "../middleware/validateZod.js";
 import { createTable, deleteTable, listAdminTables, listReviews, regenerateQr, updateTable } from "../services/adminTables.js";
-import { broadcastMenuUpdated, broadcastTable, disconnectTableCustomers, disconnectUser } from "../realtime.js";
+import { broadcastMenuUpdated, broadcastTable, disconnectTableCustomers, disconnectSession, disconnectUser } from "../realtime.js";
 import { clearLoginFailures } from "./auth.js";
 
 export const adminRouter = Router();
@@ -69,7 +69,7 @@ adminRouter.put("/menu/:id", imageUpload, async (req, res) => {
 
 /** Rupture de stock : bascule (ou fixe via { isAvailable }) et notifie les tablettes. */
 adminRouter.patch("/menu/:id/toggle-availability", async (req, res) => {
-  const item = await setAvailability(id(req.params.id), req.body);
+  const item = await setAvailability(id(req.params.id), req.body, actorOf(req));
   broadcastMenuUpdated({ action: "availability", item: menuEvent(item) });
   res.json(item);
 });
@@ -81,19 +81,19 @@ adminRouter.delete("/menu/:id", async (req, res) => {
 });
 
 adminRouter.post("/categories", async (req, res) => {
-  const category = await createCategory(req.body);
+  const category = await createCategory(req.body, actorOf(req));
   broadcastMenuUpdated({ action: "categories" });
   res.status(201).json(category);
 });
 
 adminRouter.put("/categories/:id", async (req, res) => {
-  const category = await updateCategory(id(req.params.id), req.body);
+  const category = await updateCategory(id(req.params.id), req.body, actorOf(req));
   broadcastMenuUpdated({ action: "categories" });
   res.json(category);
 });
 
 adminRouter.delete("/categories/:id", async (req, res) => {
-  await deleteCategory(id(req.params.id));
+  await deleteCategory(id(req.params.id), actorOf(req));
   broadcastMenuUpdated({ action: "categories" });
   res.status(204).end();
 });
@@ -117,9 +117,10 @@ adminRouter.put("/users/:id", validateBody(updateUserSchema), async (req, res) =
 
 /** Réinitialise le PIN ({ pin } ou généré) ; renvoyé une seule fois, sessions de l'employé fermées. */
 adminRouter.put("/users/:id/pin", async (req, res) => {
-  const { user, pin, revoked } = await resetPin(id(req.params.id), req.body, actorOf(req));
+  const { user, pin, revoked, revokedSessionIds } = await resetPin(id(req.params.id), req.body, actorOf(req), req.sessionId);
   clearLoginFailures(user.username);
   if (revoked) disconnectUser(user.id);
+  revokedSessionIds.forEach(disconnectSession);
   res.json({ user, pin });
 });
 
@@ -130,19 +131,19 @@ adminRouter.get("/tables", async (_req, res) => {
 });
 
 adminRouter.post("/tables", async (req, res) => {
-  const table = await createTable(req.body);
+  const table = await createTable(req.body, actorOf(req));
   broadcastTable(table);
   res.status(201).json(table);
 });
 
 adminRouter.put("/tables/:id", async (req, res) => {
-  const table = await updateTable(id(req.params.id), req.body);
+  const table = await updateTable(id(req.params.id), req.body, actorOf(req));
   broadcastTable(table);
   res.json(table);
 });
 
 adminRouter.delete("/tables/:id", async (req, res) => {
-  const table = await deleteTable(id(req.params.id));
+  const table = await deleteTable(id(req.params.id), actorOf(req));
   broadcastTable(table);
   res.status(204).end();
 });

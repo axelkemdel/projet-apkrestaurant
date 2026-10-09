@@ -44,13 +44,14 @@ const limiters = createLoginLimiters((req) => {
 /** Lève le blocage d'un identifiant (après réinitialisation de son PIN par le gérant). */
 export function clearLoginFailures(username: string) {
   void limiters.perAccount.resetKey(loginKey(username));
+  void limiters.perAccountDaily.resetKey(`daily:${loginKey(username)}`);
 }
 
 /**
  * Connexion : identifiant + PIN. Réponse uniforme et à durée constante (≥ LOGIN_MIN_RESPONSE_MS),
  * que l'identifiant existe ou non, que le PIN soit faux ou le compte désactivé.
  */
-authRouter.post("/login", limiters.perIp, limiters.perAccount, validateBody(loginSchema), async (req, res) => {
+authRouter.post("/login", limiters.perIp, limiters.perAccount, limiters.perAccountDaily, validateBody(loginSchema), async (req, res) => {
   const started = Date.now();
   // Durée constante : la réponse (succès ou échec) ne part jamais avant LOGIN_MIN_RESPONSE_MS,
   // le temps de réponse ne trahit ni l'existence du compte ni la cause de l'échec
@@ -109,7 +110,7 @@ authRouter.get("/me", async (req, res) => {
 
 /** Déconnexion : session révoquée en base (le jeton d'accès devient inutilisable) et cookies effacés. */
 authRouter.post("/logout", auditLogger("LOGOUT"), async (req, res) => {
-  const sessionId = sessionIdOf(req);
+  const sessionId = await sessionIdOf(req);
   if (sessionId) {
     const session = await prisma.authSession.findUnique({ where: { id: sessionId }, select: { userId: true, revokedAt: true } });
     await revokeSession(sessionId, "logout");

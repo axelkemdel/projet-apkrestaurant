@@ -3,7 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/errors.js";
-import { audit, type Actor } from "../lib/audit.js";
+import { audit, diffFields, type Actor } from "../lib/audit.js";
 import { restaurantInfo } from "../lib/restaurant.js";
 
 /** Plan de salle du gérant : tables et jetons des QR codes. */
@@ -43,29 +43,43 @@ export async function listAdminTables() {
   return { restaurant: { name: restaurantInfo.name }, tables: tables.map(toAdminTable) };
 }
 
-export async function createTable(raw: unknown) {
+export async function createTable(raw: unknown, actor: Actor) {
   const input = tableInput.parse(raw);
-  const table = await prisma.table.create({ data: input, select: adminSelect }).catch((e) => uniqueNumber(e, input.number));
+  const table = await prisma
+    .$transaction(async (tx) => {
+      const created = await tx.table.create({ data: input, select: adminSelect });
+      await audit(tx, actor, "TABLE_CHANGED", { op: "created", tableId: created.id, table: created.number, capacity: created.capacity, zone: created.zone });
+      return created;
+    })
+    .catch((e) => uniqueNumber(e, input.number));
   return toAdminTable(table);
 }
 
-export async function updateTable(id: string, raw: unknown) {
+export async function updateTable(id: string, raw: unknown, actor: Actor) {
   const input = tableInput.partial().parse(raw);
-  const exists = await prisma.table.count({ where: { id } });
-  if (!exists) throw new HttpError(404, "table.notFound");
-  const table = await prisma.table
-    .update({ where: { id }, data: input, select: adminSelect })
+  const current = await prisma.table.findUnique({ where: { id }, select: adminSelect });
+  if (!current) throw new HttpError(404, "table.notFound");
+  const table = await prisma
+    .$transaction(async (tx) => {
+      const updated = await tx.table.update({ where: { id }, data: input, select: adminSelect });
+      const changes = diffFields(current, updated, ["number", "capacity", "zone"]);
+      if (Object.keys(changes).length) await audit(tx, actor, "TABLE_CHANGED", { op: "updated", tableId: id, table: updated.number, changes });
+      return updated;
+    })
     .catch((e) => uniqueNumber(e, input.number ?? 0));
   return toAdminTable(table);
 }
 
 /** Suppression réservée aux tables sans historique (sinon les statistiques et tickets perdraient leur table). */
-export async function deleteTable(id: string) {
+export async function deleteTable(id: string, actor: Actor) {
   const table = await prisma.table.findUnique({ where: { id }, select: adminSelect });
   if (!table) throw new HttpError(404, "table.notFound");
   const payments = await prisma.payment.count({ where: { tableId: id } });
   if (table._count.orders > 0 || payments > 0) throw new HttpError(409, "table.hasHistory");
-  await prisma.table.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.table.delete({ where: { id } });
+    await audit(tx, actor, "TABLE_CHANGED", { op: "deleted", tableId: id, table: table.number, capacity: table.capacity, zone: table.zone });
+  });
   return table;
 }
 

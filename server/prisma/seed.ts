@@ -103,6 +103,11 @@ const menu: {
 ];
 
 async function main() {
+  // Données de démonstration (PIN connus, journal d'audit effacé) : jamais sur un serveur de production
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_DEMO_SEED !== "true") {
+    throw new Error("Seed de démonstration refusé en production : il efface toutes les données et crée des comptes aux PIN connus.");
+  }
+  console.warn("⚠ Comptes de démonstration aux PIN connus (0000, 1111…) : changez-les depuis Gérant → Personnel avant toute mise en service.");
   // Le journal d'audit est en ajout seul (trigger) : seule une réinitialisation complète (TRUNCATE) est possible
   await prisma.$executeRawUnsafe('TRUNCATE "AuditLog"');
   // Ordre de suppression compatible avec les clés étrangères

@@ -316,6 +316,9 @@ enum AuditAction {
   LOGOUT
   SESSION_REVOKED
   ACCESS_DENIED
+  MENU_ITEM_UPDATED
+  MENU_CATEGORY_CHANGED
+  TABLE_CHANGED
 }
 
 // Journal anti-fraude, en AJOUT SEUL : un trigger PostgreSQL refuse UPDATE et DELETE

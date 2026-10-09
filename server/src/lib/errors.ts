@@ -1,6 +1,7 @@
 import type { ErrorRequestHandler } from "express";
 import { ZodError } from "zod";
 import multer from "multer";
+import { Prisma } from "@prisma/client";
 import { isMessageKey, langOf, translate, type Lang, type MessageKey, type MessageParams } from "./i18n.js";
 
 /** Erreur métier : un code de message stable, traduit au moment de la réponse. */
@@ -36,6 +37,17 @@ export function toErrorPayload(err: unknown, lang: Lang = "fr"): ErrorPayload {
     // Message personnalisé (code connu) du premier problème, sinon message générique
     const first = err.issues[0]?.message;
     return make(400, first && isMessageKey(first) ? first : "http.invalidData", {}, err.flatten());
+  }
+  // Corps JSON illisible ou trop gros (body-parser) : erreur du client, pas du serveur
+  const bodyError = (err as { type?: unknown })?.type;
+  if (bodyError === "entity.too.large") return make(413, "http.payloadTooLarge");
+  if (typeof bodyError === "string" && bodyError.startsWith("entity.") || (err as { type?: unknown })?.type === "charset.unsupported") {
+    return make(400, "http.invalidData");
+  }
+  // Prisma : élément disparu entre-temps / encore référencé — jamais de détail SQL renvoyé
+  if (err instanceof Prisma.PrismaClientKnownRequestError) {
+    if (err.code === "P2025") return make(404, "http.resourceNotFound");
+    if (err.code === "P2003" || err.code === "P2002") return make(409, "http.conflict");
   }
   console.error(err);
   return make(500, "http.internal");

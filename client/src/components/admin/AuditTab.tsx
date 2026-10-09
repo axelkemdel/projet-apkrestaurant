@@ -26,7 +26,22 @@ const ACTIONS: Record<AuditAction, { Icon: typeof Ban; tone: string }> = {
   LOGOUT: { Icon: LogOut, tone: "bg-slate-100 text-slate-700" },
   SESSION_REVOKED: { Icon: ShieldAlert, tone: "bg-red-50 text-red-700" },
   ACCESS_DENIED: { Icon: ShieldAlert, tone: "bg-red-50 text-red-700" },
+  MENU_ITEM_UPDATED: { Icon: UtensilsCrossed, tone: "bg-slate-100 text-slate-700" },
+  MENU_CATEGORY_CHANGED: { Icon: UtensilsCrossed, tone: "bg-slate-100 text-slate-700" },
+  TABLE_CHANGED: { Icon: QrCode, tone: "bg-slate-100 text-slate-700" },
 };
+
+const FIELDS = ["capacity", "categoryId", "descriptionEn", "descriptionFr", "imageUrl", "isArchived", "isAvailable", "nameEn", "nameFr", "number", "options", "order", "station", "zone"] as const;
+
+/** Liste lisible des champs modifiés (« disponibilité, options et suppléments »). */
+function changedFields(changes: unknown, t: TFunction): string {
+  if (!changes || typeof changes !== "object") return "";
+  return Object.keys(changes)
+    .map((k) => ((FIELDS as readonly string[]).includes(k) ? t(`audit.fields.${k as (typeof FIELDS)[number]}`) : k))
+    .join(", ");
+}
+
+const opName = (op: unknown, t: TFunction) => (op === "created" || op === "updated" || op === "deleted" ? t(`audit.ops.${op}`) : "");
 
 /** Appareil (navigateur / application) déduit du User-Agent journalisé. */
 function device(ua: unknown): string {
@@ -109,6 +124,16 @@ function describe(e: AuditLogEntry, t: TFunction, lang: Lang): string {
       return t("audit.desc.sessionRevoked");
     case "ACCESS_DENIED":
       return t("audit.desc.accessDenied", { role: roleName(d.role, t), method: s(d.method), path: s(d.path) });
+    case "MENU_ITEM_UPDATED":
+      return t("audit.desc.itemUpdated", { name: dishName(d, lang), fields: changedFields(d.changes, t) });
+    case "MENU_CATEGORY_CHANGED": {
+      const fields = changedFields(d.changes, t);
+      return t("audit.desc.categoryChanged", { name: lang === "en" ? s(d.nameEn) : s(d.nameFr), op: opName(d.op, t), fields: fields && `${lang === "fr" ? " : " : ": "}${fields}` });
+    }
+    case "TABLE_CHANGED": {
+      const fields = changedFields(d.changes, t);
+      return t("audit.desc.tableChanged", { table: s(d.table), op: opName(d.op, t), fields: fields && `${lang === "fr" ? " : " : ": "}${fields}` });
+    }
   }
 }
 

@@ -19,7 +19,8 @@ const CLIENT_CSP = [
   // Photos des plats : téléversées (self) ou URL externes en HTTPS (CDN)
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' ws: wss:",
+  // API et Socket.io servis par la même origine ('self' couvre aussi ws/wss du même hôte)
+  "connect-src 'self'",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",

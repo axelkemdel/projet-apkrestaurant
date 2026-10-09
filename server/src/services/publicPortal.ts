@@ -19,6 +19,8 @@ import { createOrder, orderInclude, orderLineSchema, type OrderWithRelations } f
 export const qrTokenSchema = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "portal.invalidQr");
 
 /** Statuts encore visibles par le client (la table est « en session »). */
+/** Bons clients encore non pris en charge par la cuisine, par table. */
+const MAX_PENDING_CUSTOMER_ORDERS = 5;
 const OPEN: Prisma.EnumOrderStatusFilter = { notIn: ["PAID", "CANCELLED"] };
 /** Fenêtre pendant laquelle un client peut noter un bon de sa table. */
 const REVIEW_WINDOW_MS = 12 * 3600_000;
@@ -116,6 +118,10 @@ export async function createCustomerOrder(raw: unknown) {
   if (!env.publicOrdering) throw new HttpError(403, "portal.orderingDisabled");
   const input = publicOrderSchema.parse(raw);
   const table = await tableByToken(input.token);
+  // Plafond par TABLE (indépendant de l'adresse IP) : un QR photographié ou un script ne peut
+  // pas inonder la cuisine ; au-delà, il faut que le personnel prenne en charge les bons en attente
+  const pending = await prisma.order.count({ where: { tableId: table.id, source: "CUSTOMER", status: "PENDING" } });
+  if (pending >= MAX_PENDING_CUSTOMER_ORDERS) throw new HttpError(429, "portal.tooManyOrders");
   // Prix, disponibilité et options revérifiés côté serveur par createOrder
   return createOrder(
     { type: "DINE_IN", tableId: table.id, language: input.language, customerNote: input.customerNote, items: input.items },

@@ -39,8 +39,9 @@ function usernameTaken(e: unknown): never {
   throw e;
 }
 
+/** PIN généré à 6 chiffres (1 000 000 combinaisons) ; un PIN saisi par le gérant peut en avoir 4 à 6. */
 function generatePin(): string {
-  return String(randomInt(0, 10_000)).padStart(4, "0");
+  return String(randomInt(0, 1_000_000)).padStart(6, "0");
 }
 
 export function listUsers() {
@@ -61,15 +62,21 @@ export async function createUser(raw: unknown, actor: Actor) {
   return { user, pin };
 }
 
-/** Empêche de se retirer soi-même l'accès gérant, ou de supprimer le dernier gérant actif. */
-async function assertAdminRemains(targetId: string, actorId: string, next: { role?: Role; isActive?: boolean }) {
-  const target = await prisma.user.findUnique({ where: { id: targetId } });
+type Tx = Prisma.TransactionClient;
+
+/**
+ * Empêche de se retirer soi-même l'accès gérant, ou de supprimer le dernier gérant actif.
+ * Exécuté DANS la transaction, gérants actifs verrouillés (FOR UPDATE) : deux gérants qui
+ * se rétrograderaient mutuellement au même instant ne peuvent pas laisser zéro gérant.
+ */
+async function assertAdminRemains(tx: Tx, targetId: string, actorId: string, next: { role?: Role; isActive?: boolean }) {
+  const admins = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "User" WHERE role = 'ADMIN' AND "isActive" = true FOR UPDATE`;
+  const target = await tx.user.findUnique({ where: { id: targetId } });
   if (!target) throw new HttpError(404, "users.notFound");
   const losesAdmin = target.role === "ADMIN" && target.isActive && (next.role !== undefined && next.role !== "ADMIN" || next.isActive === false);
   if (!losesAdmin) return target;
   if (targetId === actorId) throw new HttpError(409, "users.cannotRemoveOwnAdmin");
-  const admins = await prisma.user.count({ where: { role: "ADMIN", isActive: true } });
-  if (admins <= 1) throw new HttpError(409, "users.lastAdmin");
+  if (admins.length <= 1) throw new HttpError(409, "users.lastAdmin");
   return target;
 }
 
@@ -79,11 +86,12 @@ async function assertAdminRemains(targetId: string, actorId: string, next: { rol
  */
 export async function updateUser(id: string, raw: unknown, actor: Actor) {
   const input = updateUserSchema.parse(raw);
-  const target = await assertAdminRemains(id, actor.id, input);
-  const roleChanged = input.role !== undefined && input.role !== target.role;
-  const statusChanged = input.isActive !== undefined && input.isActive !== target.isActive;
-  const revoke = roleChanged || (statusChanged && input.isActive === false);
+  let revoke = false;
   const user = await prisma.$transaction(async (tx) => {
+    const target = await assertAdminRemains(tx, id, actor.id, input);
+    const roleChanged = input.role !== undefined && input.role !== target.role;
+    const statusChanged = input.isActive !== undefined && input.isActive !== target.isActive;
+    revoke = roleChanged || (statusChanged && input.isActive === false);
     const updated = await tx.user.update({
       where: { id },
       data: { ...input, ...(revoke && { sessionVersion: { increment: 1 } }) },
@@ -102,15 +110,19 @@ export async function updateUser(id: string, raw: unknown, actor: Actor) {
 }
 
 /**
- * Réinitialise le PIN (saisi ou généré). Les sessions ouvertes de l'employé
- * sont fermées, sauf s'il s'agit de son propre PIN (le gérant reste connecté).
+ * Réinitialise le PIN (saisi ou généré). Les sessions ouvertes de l'employé sont
+ * fermées. S'il s'agit de son propre PIN, le gérant garde la session de CET appareil,
+ * mais toutes ses autres sessions sont fermées (un appareil volé perd l'accès).
  */
-export async function resetPin(id: string, raw: unknown, actor: Actor) {
+export async function resetPin(id: string, raw: unknown, actor: Actor, currentSessionId?: string) {
   const input = z.object({ pin: pinSchema.optional() }).strict().parse(raw ?? {});
   if (!(await prisma.user.findUnique({ where: { id } }))) throw new HttpError(404, "users.notFound");
   const pin = input.pin ?? generatePin();
   const pinHash = await bcrypt.hash(pin, BCRYPT_COST);
   const revoke = id !== actor.id;
+  const otherSessions = revoke
+    ? []
+    : await prisma.authSession.findMany({ where: { userId: id, revokedAt: null, ...(currentSessionId && { id: { not: currentSessionId } }) }, select: { id: true } });
   const user = await prisma.$transaction(async (tx) => {
     const updated = await tx.user.update({
       where: { id },
@@ -118,9 +130,10 @@ export async function resetPin(id: string, raw: unknown, actor: Actor) {
       select: userSelect,
     });
     if (revoke) await revokeUserSessions(tx, id, "pin_reset");
+    else await revokeUserSessions(tx, id, "pin_reset", currentSessionId);
     // Le PIN lui-même n'est jamais journalisé
     await audit(tx, actor, "PIN_RESET", { targetUserId: id, name: updated.name, generated: !input.pin });
     return updated;
   });
-  return { user, pin, revoked: revoke };
+  return { user, pin, revoked: revoke, revokedSessionIds: otherSessions.map((s) => s.id) };
 }

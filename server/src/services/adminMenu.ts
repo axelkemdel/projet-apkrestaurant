@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { deleteDishImage, isLocalDishImage, saveDishImage } from "../lib/uploads.js";
-import { audit, type Actor } from "../lib/audit.js";
+import { audit, diffFields, type Actor } from "../lib/audit.js";
 import { normalizeOptions, optionsInputSchema } from "../lib/menuOptions.js";
 
 // ---------------------------------------------------------------------------
@@ -23,12 +23,12 @@ const jsonField = <T extends z.ZodTypeAny>(schema: T) =>
 
 const boolField = z.preprocess((v) => (v === "true" ? true : v === "false" ? false : v), z.boolean());
 
-/** URL d'image acceptée : http(s) externe (CDN) ou fichier déjà téléversé ici. */
+/** URL d'image acceptée : https externe (CDN ; http serait bloqué par la CSP et en clair) ou fichier téléversé ici. */
 const imageUrlField = z
   .string()
   .trim()
   .max(500)
-  .refine((u) => u === "" || isLocalDishImage(u) || /^https?:\/\/[^\s"'<>]+$/i.test(u), "validation.imageUrl");
+  .refine((u) => u === "" || isLocalDishImage(u) || /^https:\/\/[^\s"'<>]+$/i.test(u), "validation.imageUrl");
 
 // Carte bilingue : nom obligatoire dans les deux langues, descriptions facultatives
 const itemFields = {
@@ -153,6 +153,11 @@ export async function updateMenuItem(id: string, raw: unknown, actor: Actor, fil
       },
       include: adminItemInclude,
       });
+      // Autres changements (disponibilité, archivage, catégorie, options et leurs suppléments…) : ancien → nouveau
+      const changes = diffFields(current, updated, ["nameFr", "nameEn", "categoryId", "isAvailable", "isArchived", "options", "imageUrl", "descriptionFr", "descriptionEn"]);
+      if (Object.keys(changes).length) {
+        await audit(tx, actor, "MENU_ITEM_UPDATED", { menuItemId: id, nameFr: updated.nameFr, nameEn: updated.nameEn, changes });
+      }
       // Anti-fraude : tout changement de prix est tracé (ancien → nouveau)
       if (input.price !== undefined && input.price !== current.price) {
         await audit(tx, actor, "MENU_PRICE_CHANGED", {
@@ -174,15 +179,23 @@ export async function updateMenuItem(id: string, raw: unknown, actor: Actor, fil
   }
 }
 
-export async function setAvailability(id: string, raw: unknown) {
+export async function setAvailability(id: string, raw: unknown, actor: Actor) {
   const { isAvailable } = z.object({ isAvailable: z.boolean().optional() }).strict().parse(raw ?? {});
   const current = await prisma.menuItem.findUnique({ where: { id }, select: { isAvailable: true } });
   if (!current) throw new HttpError(404, "menu.itemNotFound");
   // Sans valeur explicite : bascule. Avec valeur : idempotent (deux gérants qui cliquent ne s'annulent pas).
-  const item = await prisma.menuItem.update({
-    where: { id },
-    data: { isAvailable: isAvailable ?? !current.isAvailable },
-    include: adminItemInclude,
+  const next = isAvailable ?? !current.isAvailable;
+  const item = await prisma.$transaction(async (tx) => {
+    const updated = await tx.menuItem.update({ where: { id }, data: { isAvailable: next }, include: adminItemInclude });
+    if (next !== current.isAvailable) {
+      await audit(tx, actor, "MENU_ITEM_UPDATED", {
+        menuItemId: id,
+        nameFr: updated.nameFr,
+        nameEn: updated.nameEn,
+        changes: { isAvailable: { from: current.isAvailable, to: next } },
+      });
+    }
+    return updated;
   });
   return toAdminItem(item);
 }
@@ -220,23 +233,40 @@ function uniqueNameError(e: unknown) {
     : e;
 }
 
-export async function createCategory(raw: unknown) {
+export async function createCategory(raw: unknown, actor: Actor) {
   const input = categorySchema.parse(raw);
   const last = await prisma.category.aggregate({ _max: { order: true } });
-  return prisma.category
-    .create({ data: { ...input, order: input.order ?? (last._max.order ?? -1) + 1 } })
+  return prisma
+    .$transaction(async (tx) => {
+      const created = await tx.category.create({ data: { ...input, order: input.order ?? (last._max.order ?? -1) + 1 } });
+      await audit(tx, actor, "MENU_CATEGORY_CHANGED", { op: "created", categoryId: created.id, nameFr: created.nameFr, nameEn: created.nameEn, station: created.station });
+      return created;
+    })
     .catch((e) => Promise.reject(uniqueNameError(e)));
 }
 
-export async function updateCategory(id: string, raw: unknown) {
+export async function updateCategory(id: string, raw: unknown, actor: Actor) {
   const input = categorySchema.partial().parse(raw);
-  if (!(await prisma.category.findUnique({ where: { id } }))) throw new HttpError(404, "menu.categoryNotFound");
-  return prisma.category.update({ where: { id }, data: input }).catch((e) => Promise.reject(uniqueNameError(e)));
+  const current = await prisma.category.findUnique({ where: { id } });
+  if (!current) throw new HttpError(404, "menu.categoryNotFound");
+  return prisma
+    .$transaction(async (tx) => {
+      const updated = await tx.category.update({ where: { id }, data: input });
+      const changes = diffFields(current, updated, ["nameFr", "nameEn", "station", "order"]);
+      if (Object.keys(changes).length) {
+        await audit(tx, actor, "MENU_CATEGORY_CHANGED", { op: "updated", categoryId: id, nameFr: updated.nameFr, nameEn: updated.nameEn, changes });
+      }
+      return updated;
+    })
+    .catch((e) => Promise.reject(uniqueNameError(e)));
 }
 
-export async function deleteCategory(id: string) {
+export async function deleteCategory(id: string, actor: Actor) {
   const category = await prisma.category.findUnique({ where: { id }, include: { _count: { select: { items: true } } } });
   if (!category) throw new HttpError(404, "menu.categoryNotFound");
   if (category._count.items > 0) throw new HttpError(409, "menu.categoryNotEmpty");
-  await prisma.category.delete({ where: { id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.category.delete({ where: { id } });
+    await audit(tx, actor, "MENU_CATEGORY_CHANGED", { op: "deleted", categoryId: id, nameFr: category.nameFr, nameEn: category.nameEn, station: category.station });
+  });
 }

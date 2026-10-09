@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { getCheckoutOverview } from "./checkout.js";
+import { daySchema } from "../lib/security.js";
 
 /**
  * Fuseau horaire du restaurant : les dates sont stockées en UTC, mais « la
@@ -25,10 +26,7 @@ export function todayLocal(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: APP_TIMEZONE }).format(new Date());
 }
 
-const dateSchema = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, "validation.dateFormat")
-  .refine((d) => !Number.isNaN(Date.parse(d)), "validation.dateInvalid");
+const dateSchema = daySchema;
 
 const num = (v: bigint | number | null | undefined) => Number(v ?? 0);
 

@@ -320,7 +320,10 @@ export type AuditAction =
   | "LOGIN_FAILED"
   | "LOGOUT"
   | "SESSION_REVOKED"
-  | "ACCESS_DENIED";
+  | "ACCESS_DENIED"
+  | "MENU_ITEM_UPDATED"
+  | "MENU_CATEGORY_CHANGED"
+  | "TABLE_CHANGED";
 
 export interface AuditLogEntry {
   id: string;

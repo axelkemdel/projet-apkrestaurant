@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { randomBytes } from "node:crypto";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -6,10 +7,23 @@ function required(name: string): string {
   return value;
 }
 
-const jwtSecret = required("JWT_SECRET");
-if (process.env.NODE_ENV === "production" && (jwtSecret.length < 32 || /changez-moi/i.test(jwtSecret))) {
-  throw new Error("JWT_SECRET doit être une valeur aléatoire d'au moins 32 caractères en production");
+/**
+ * Secret de signature des jetons. Un secret faible (court ou valeur d'exemple) rend les
+ * jetons falsifiables : refusé en production ; ailleurs (NODE_ENV rarement défini sur un
+ * serveur de restaurant), remplacé par un secret aléatoire éphémère — sûr, mais les
+ * sessions ne survivent pas à un redémarrage tant qu'un vrai secret n'est pas configuré.
+ */
+function resolveJwtSecret(): string {
+  const value = required("JWT_SECRET");
+  if (value.length >= 32 && !/changez-moi|change-me/i.test(value)) return value;
+  const hint = "Générez-en un : node -e \"console.log(require('crypto').randomBytes(48).toString('hex'))\"";
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(`JWT_SECRET doit être une valeur aléatoire d'au moins 32 caractères. ${hint}`);
+  }
+  console.warn(`⚠ JWT_SECRET faible ou d'exemple : secret aléatoire temporaire utilisé (sessions perdues au redémarrage). ${hint}`);
+  return randomBytes(48).toString("hex");
 }
+const jwtSecret = resolveJwtSecret();
 
 const corsOrigin = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
   .split(",")
@@ -57,6 +71,8 @@ export const env = {
   /** Connexion : échecs tolérés par identifiant et par appareil (IP) sur 5 minutes. */
   loginMaxAttemptsAccount: Number(process.env.LOGIN_MAX_ATTEMPTS_ACCOUNT ?? 5),
   loginMaxAttemptsIp: Number(process.env.LOGIN_MAX_ATTEMPTS_IP ?? 10),
+  /** Échecs tolérés par identifiant sur 24 h (second palier anti force brute). */
+  loginMaxAttemptsAccountDaily: Number(process.env.LOGIN_MAX_ATTEMPTS_ACCOUNT_DAILY ?? 20),
   /** Durée minimale d'une réponse de connexion (anti attaque temporelle). */
   loginMinResponseMs: Number(process.env.LOGIN_MIN_RESPONSE_MS ?? 800),
 };

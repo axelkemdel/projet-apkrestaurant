@@ -6,7 +6,7 @@ import { restaurantInfo } from "../lib/restaurant.js";
 import { orderInclude, type OrderWithRelations } from "./orders.js";
 import { env } from "../lib/env.js";
 import { audit, type Actor } from "../lib/audit.js";
-import { idSchema } from "../lib/security.js";
+import { MAX_AMOUNT, idSchema } from "../lib/security.js";
 
 type Tx = Prisma.TransactionClient;
 
@@ -148,14 +148,14 @@ export const payInputSchema = z
     orderId: idSchema.optional(),
     mode: z.enum(["CASH", "CARD", "ORANGE_MONEY", "TELECEL_CASH"]),
     /** Montant à imputer (division égale, acompte, solde). Ignoré si `items` est fourni. */
-    amount: z.number().int().positive().optional(),
+    amount: z.number().int().positive().max(MAX_AMOUNT, "validation.amountTooLarge").optional(),
     /** Paiement par sélection d'articles : le montant est calculé côté serveur. */
     items: z
       .array(z.object({ orderItemId: idSchema, quantity: z.number().int().positive().max(1000) }).strict())
       .min(1)
       .optional(),
     /** Espèces remises par le client (rendu de monnaie calculé côté serveur). */
-    amountReceived: z.number().int().positive().optional(),
+    amountReceived: z.number().int().positive().max(MAX_AMOUNT, "validation.amountTooLarge").optional(),
     reference: z.string().trim().max(60).optional(),
     label: z.string().trim().max(40).optional(),
   })
@@ -326,7 +326,7 @@ export const discountInputSchema = z
     tableId: idSchema.optional(),
     orderId: idSchema.optional(),
     kind: z.enum(["PERCENT", "AMOUNT"]),
-    value: z.number().int().positive(),
+    value: z.number().int().positive().max(MAX_AMOUNT, "validation.amountTooLarge"),
     reason: z.string().trim().min(3, "validation.reasonRequired").max(120),
   })
   .strict()

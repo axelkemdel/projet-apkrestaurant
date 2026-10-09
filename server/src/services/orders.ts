@@ -3,7 +3,7 @@ import type { OrderSource, OrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { HttpError } from "../lib/errors.js";
 import { audit, type Actor } from "../lib/audit.js";
-import { idSchema } from "../lib/security.js";
+import { MAX_AMOUNT, idSchema } from "../lib/security.js";
 import { normalizeOptions, QUICK_NOTES } from "../lib/menuOptions.js";
 
 // ---------------------------------------------------------------------------
@@ -95,8 +95,9 @@ export async function createOrder(
 
   return prisma.$transaction(async (tx) => {
     if (input.tableId) {
-      const table = await tx.table.findUnique({ where: { id: input.tableId } });
-      if (!table) throw new HttpError(404, "table.notFound");
+      // Même verrou que l'encaissement : un bon ne peut pas se glisser pendant la clôture de l'addition
+      const table = await tx.$queryRaw<{ id: string }[]>`SELECT id FROM "Table" WHERE id = ${input.tableId} FOR UPDATE`;
+      if (!table.length) throw new HttpError(404, "table.notFound");
     }
 
     const ids = [...new Set(input.items.map((i) => i.menuItemId))];
@@ -145,6 +146,8 @@ export async function createOrder(
     });
 
     const totalAmount = lines.reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
+    // Colonnes INT (32 bits) : un total aberrant est refusé proprement plutôt que de faire échouer la base
+    if (totalAmount > MAX_AMOUNT) throw new HttpError(400, "validation.amountTooLarge");
 
     const order = await tx.order.create({
       data: {
@@ -198,6 +201,9 @@ export async function updateOrderStatus(orderId: string, raw: unknown, actor: Ac
     }
 
     if (status === "CANCELLED") {
+      // Verrou partagé avec l'encaissement (table, sinon bon) : pas d'annulation pendant un paiement
+      if (current.tableId) await tx.$queryRaw`SELECT id FROM "Table" WHERE id = ${current.tableId} FOR UPDATE`;
+      else await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
       const settled = await tx.order.count({
         where: { id: orderId, OR: [{ payments: { some: {} } }, { discounts: { some: {} } }] },
       });

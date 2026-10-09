@@ -25,3 +25,14 @@ export function audit(
     data: { userId: actor.id, action, details, ipAddress: actor.ip?.slice(0, 64) ?? null },
   });
 }
+
+/** Champs modifiés entre deux états, au format { champ: { from, to } } (comparaison JSON). */
+export function diffFields<T extends object>(before: T, after: T, keys: (keyof T & string)[]): Prisma.InputJsonObject {
+  const changes: Record<string, Prisma.InputJsonValue> = {};
+  for (const key of keys) {
+    const from = before[key] ?? null;
+    const to = after[key] ?? null;
+    if (JSON.stringify(from) !== JSON.stringify(to)) changes[key] = { from, to } as unknown as Prisma.InputJsonValue;
+  }
+  return changes;
+}
