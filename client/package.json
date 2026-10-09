@@ -11,7 +11,7 @@
     "cap:build": "vite build && npx cap sync",
     "cap:open": "npx cap open android",
     "cap:sync": "vite build && npx cap sync android",
-    "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
+    "apk:debug": "npm run cap:sync && bash scripts/build-apk.sh",
     "capacitor:sync:after": "node scripts/android-network-config.mjs",
     "android:sdk": "bash scripts/setup-android-sdk.sh"
   },

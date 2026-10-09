@@ -6,11 +6,11 @@ set -euo pipefail
 SDK="${ANDROID_HOME:-$HOME/android-sdk}"
 TOOLS_ZIP="commandlinetools-linux-13114758_latest.zip"
 
-# JDK 21 requis par Capacitor 8
-if ! java -version 2>&1 | grep -Eq 'version "(2[1-9]|[3-9][0-9])'; then
-  echo "→ Installation du JDK 21"
-  sudo apt-get update -qq && sudo apt-get install -y -qq openjdk-21-jdk-headless
-fi
+HERE="$(cd "$(dirname "$0")" && pwd)"
+# JDK 21 exactement (Gradle 8.14 refuse Java 25, installé par défaut dans Codespaces)
+# shellcheck source=java21.sh
+source "$HERE/java21.sh"
+use_jdk21
 
 if [ ! -x "$SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
   echo "→ Téléchargement des outils Android en ligne de commande"
@@ -25,5 +25,11 @@ yes | "$SDKMANAGER" --sdk_root="$SDK" --licenses >/dev/null || true
 "$SDKMANAGER" --sdk_root="$SDK" "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
 # Emplacement du SDK pour Gradle (fichier local, ignoré par git)
-echo "sdk.dir=$SDK" > "$(dirname "$0")/../android/local.properties"
+echo "sdk.dir=$SDK" > "$HERE/../android/local.properties"
+
+# Gradle utilisera toujours ce JDK 21, même si « java » désigne une autre version
+mkdir -p "$HOME/.gradle"
+touch "$HOME/.gradle/gradle.properties"
+sed -i '/^org.gradle.java.home=/d' "$HOME/.gradle/gradle.properties"
+echo "org.gradle.java.home=$JAVA_HOME" >> "$HOME/.gradle/gradle.properties"
 echo "✔ SDK Android prêt dans $SDK — compilez avec : npm run apk:debug -w client"
