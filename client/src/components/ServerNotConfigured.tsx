@@ -14,7 +14,7 @@ export function ServerNotConfigured() {
       <ServerCog size={40} className="text-brand-500" />
       <h1 className="mt-4 text-xl font-bold">{t("native.notConfiguredTitle")}</h1>
       <p className="mt-2 max-w-md text-slate-400">{t("native.notConfiguredText")}</p>
-      <code className="mt-4 rounded-lg bg-slate-800 px-3 py-2 text-sm text-brand-300">CAP_SERVER_URL=http://192.168.1.10:4000 npm run cap:build</code>
+      <code className="mt-4 rounded-lg bg-slate-800 px-3 py-2 text-sm text-brand-300">CAP_SERVER_URL=http://192.168.1.10:4000 npm run cap:sync</code>
     </div>
   );
 }

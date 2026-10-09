@@ -326,21 +326,31 @@ L'adresse encodée est celle depuis laquelle l'administration est ouverte, ou `V
 
 Le dossier `client/android/` est un projet Android Studio prêt à compiler (Capacitor 8, application **THAONI APP**, identifiant **`com.restoapp.pos`**, interface web `client/dist`). Plugins : `@capacitor/status-bar` (barre d'état sombre), `@capacitor/keyboard` (l'écran se redimensionne au-dessus du clavier virtuel), `@capacitor/screen-orientation` (**paysage imposé** pour la caisse et la cuisine, orientation libre ailleurs).
 
-**Principe** : l'APK charge l'interface depuis le serveur RestoApp du restaurant (`CAP_SERVER_URL`). Interface et API ont ainsi la même origine, condition pour des cookies `HttpOnly` + `SameSite=Strict`, et une mise à jour de l'interface sur le serveur arrive sur toutes les tablettes sans réinstaller l'APK. En production, le serveur Node sert lui-même l'interface compilée (`npm run build` puis `npm start -w server` : interface + API sur le port 4000).
+**Principe** : l'APK charge l'interface depuis le serveur THAONI APP. Interface et API ont ainsi la même origine, condition pour des cookies `HttpOnly` + `SameSite=Strict`, et une mise à jour de l'interface sur le serveur arrive sur toutes les tablettes sans réinstaller l'APK. En production, le serveur Node sert lui-même l'interface compilée (`npm run build` puis `npm start -w server` : interface + API sur le port 4000).
+
+**Adresse du serveur** (`client/scripts/server-url.cjs`, utilisée par `capacitor.config.ts`, `vite build` et la configuration réseau Android), dans cet ordre :
+1. `CAP_SERVER_URL` (ou `VITE_SERVER_URL`) si elle est définie — recommandé en production ;
+2. dans GitHub Codespaces : l'adresse publique du Codespace, `https://<codespace>-5173.app.github.dev` (port `CAP_SERVER_PORT`, 5173 par défaut) ;
+3. sinon, l'adresse IP locale de la machine : `http://<IP>:5173` (tablettes sur le même réseau).
+
+L'adresse retenue est affichée pendant `cap:sync` (« Serveur de l'application : … »). Elle est aussi injectée dans l'interface embarquée : si l'APK démarre quand même sur cette interface, il redirige vers le serveur. Le serveur accepte les origines de l'application (`capacitor://localhost`, `http(s)://localhost`) et toutes les adresses publiques de son propre Codespace.
+
+**Compiler l'APK depuis le terminal (Codespace ou Ubuntu, sans Android Studio)**
 
 ```bash
-# 1. Compiler l'interface et synchroniser le projet Android avec l'adresse du serveur
-CAP_SERVER_URL=http://192.168.1.10:4000 npm run cap:build -w client   # "vite build && npx cap sync"
-# 2. Ouvrir dans Android Studio (Build → Build APK(s))
-npm run cap:open -w client                                            # "npx cap open android"
-#    …ou en ligne de commande (JDK 21 + SDK Android installés) :
-cd client/android && ./gradlew assembleDebug   # → app/build/outputs/apk/debug/app-debug.apk
+npm run android:sdk -w client   # une seule fois : JDK 21 + SDK Android en ligne de commande (~1 Go)
+npm run apk:debug -w client     # vite build + cap sync android + ./gradlew assembleDebug
+# → client/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-**Sans Android Studio** : le workflow GitHub Actions `.github/workflows/android-apk.yml` compile l'APK sur les serveurs de GitHub. Onglet **Actions → APK Android → Run workflow**, saisir l'adresse du serveur, puis télécharger `restoapp-debug-apk` dans les « Artifacts » de l'exécution. Il se lance aussi à chaque modification de `client/` (adresse : variable de dépôt `CAP_SERVER_URL`).
+Avec une adresse précise : `CAP_SERVER_URL=http://192.168.1.10:4000 npm run apk:debug -w client`. Dans un Codespace, passez le port 5173 en visibilité **Public** (onglet Ports) pour que les tablettes puissent l'ouvrir, et gardez `npm run dev` lancé.
+
+**Avec Android Studio** : `npm run cap:sync -w client` (`vite build && npx cap sync android`) puis `npm run cap:open -w client` et **Build → Build APK(s)**.
+
+**Sur les serveurs de GitHub** : le workflow `.github/workflows/android-apk.yml` compile l'APK à chaque modification de `client/` avec l'adresse de la variable de dépôt `CAP_SERVER_URL` (Settings → Secrets and variables → Actions → Variables) et le publie dans les « Artifacts » de l'exécution (`restoapp-debug-apk`). Le bouton **Run workflow** (adresse saisie à la main) n'apparaît qu'une fois le workflow présent sur la branche par défaut (`main`).
 
 **Réseau et sécurité Android**
-- `res/xml/network_security_config.xml` est **régénéré à chaque `cap sync`** (`scripts/android-network-config.mjs`) : HTTPS obligatoire partout, et HTTP en clair autorisé **uniquement vers l'hôte du serveur RestoApp** si `CAP_SERVER_URL` est en `http://` (serveur du réseau local). Recommandé : HTTPS (certificat sur le serveur ou proxy type Caddy), aucune exception n'est alors générée.
+- `res/xml/network_security_config.xml` est **régénéré à chaque `cap sync`** (`scripts/android-network-config.mjs`) : HTTPS obligatoire partout, et HTTP en clair autorisé **uniquement vers l'hôte du serveur** si son adresse est en `http://` (serveur du réseau local). Recommandé : HTTPS (certificat sur le serveur ou proxy type Caddy), aucune exception n'est alors générée.
 - Serveur en `http://` sur le réseau local : mettre `COOKIE_SECURE=false` dans `server/.env` (Android refuse les cookies `Secure` hors HTTPS) et ajouter l'adresse à `CORS_ORIGIN`.
 - Pas de sauvegarde cloud des données de l'application (`allowBackup=false`, règles d'extraction Android 12+) ; débogage WebView désactivé sauf `CAP_DEBUG=true`.
 - APK compilé sans `CAP_SERVER_URL` : un écran explique comment recompiler avec l'adresse du serveur.

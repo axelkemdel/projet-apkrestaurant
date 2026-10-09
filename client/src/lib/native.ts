@@ -6,11 +6,20 @@ import { Capacitor } from "@capacitor/core";
  */
 export const isNative = Capacitor.isNativePlatform();
 
+/** Adresse du serveur injectée à la compilation (vite build, scripts/server-url.cjs). */
+const BUILT_SERVER_URL = (import.meta.env.VITE_SERVER_URL as string | undefined) ?? "";
+
 /**
- * Application lancée sur l'interface embarquée dans l'APK (aucun serveur configuré à la
- * compilation, CAP_SERVER_URL) : l'API n'est pas joignable depuis cette origine.
+ * Application démarrée sur l'interface embarquée dans l'APK (https://localhost) au lieu du
+ * serveur : l'API n'est pas joignable depuis cette origine. Si une adresse de serveur a été
+ * injectée à la compilation, on s'y rend (navigation autorisée vers ce seul hôte).
  */
-export const isBundledWithoutServer = isNative && window.location.hostname === "localhost";
+const onBundledPage = isNative && window.location.hostname === "localhost";
+export const redirectingToServer = onBundledPage && BUILT_SERVER_URL !== "";
+if (redirectingToServer) window.location.replace(`${BUILT_SERVER_URL}/login`);
+
+/** Interface embarquée sans aucune adresse de serveur : écran d'explication. */
+export const isBundledWithoutServer = onBundledPage && !redirectingToServer;
 
 export async function initNative() {
   if (!isNative) return;

@@ -44,7 +44,13 @@ jobs:
         env:
           # Passée par variable d'environnement (jamais interpolée dans le script shell)
           CAP_SERVER_URL: ${{ inputs.server_url || vars.CAP_SERVER_URL }}
-        run: npm run cap:build -w client
+        run: |
+          if [ -z "$CAP_SERVER_URL" ]; then
+            echo "::warning title=Adresse du serveur absente::APK compilé sans adresse : il affichera « Serveur non configuré ». Renseignez server_url ou la variable de dépôt CAP_SERVER_URL."
+          else
+            echo "Adresse du serveur : $CAP_SERVER_URL"
+          fi
+          npm run cap:sync -w client
 
       - name: Compilation de l'APK (debug)
         working-directory: client/android

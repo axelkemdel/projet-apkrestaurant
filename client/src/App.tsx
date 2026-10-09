@@ -14,7 +14,7 @@ import { AdminView } from "./pages/AdminView";
 import { CustomerTableDashboard } from "./pages/CustomerTableDashboard";
 import { Toaster } from "./components/Toasts";
 import { ServerNotConfigured } from "./components/ServerNotConfigured";
-import { applyOrientation, initNative, isBundledWithoutServer } from "./lib/native";
+import { applyOrientation, initNative, isBundledWithoutServer, redirectingToServer } from "./lib/native";
 
 
 export function App() {
@@ -26,7 +26,7 @@ export function App() {
 
   // Au chargement : la session éventuelle est portée par le cookie HttpOnly, on la vérifie auprès du serveur
   useEffect(() => {
-    if (!isGuest && !isBundledWithoutServer) void restoreSession();
+    if (!isGuest && !isBundledWithoutServer && !redirectingToServer) void restoreSession();
   }, [isGuest]);
 
   // Application Android : barre d'état, clavier, et paysage imposé pour la caisse et la cuisine
@@ -34,6 +34,13 @@ export function App() {
   useEffect(() => void applyOrientation(pathname), [pathname]);
 
   if (isBundledWithoutServer) return <ServerNotConfigured />;
+  if (redirectingToServer) {
+    return (
+      <div className="flex h-full items-center justify-center bg-slate-950">
+        <Loader2 className="animate-spin text-slate-500" />
+      </div>
+    );
+  }
 
   if (isGuest) {
     return (
