@@ -13,4 +13,4 @@ dist/
 *.keystore
 *-signed.apk
 # Récapitulatifs de PIN générés par server/scripts/reset-demo-pins.ts
-thaoni-pins-*.txt
+appresto-pins-*.txt

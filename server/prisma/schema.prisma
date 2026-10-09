@@ -1,4 +1,4 @@
-// RestoApp — schéma de base de données (PostgreSQL)
+// Appresto — schéma de base de données (PostgreSQL)
 // Les montants sont stockés en entiers (FCFA, pas de centimes).
 
 generator client {

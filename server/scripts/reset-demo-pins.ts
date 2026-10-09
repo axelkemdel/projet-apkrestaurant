@@ -107,7 +107,7 @@ async function main() {
 
     const stamp = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 16);
     const lines = [
-      `THAONI APP — nouveaux codes PIN (${new Date().toLocaleString("fr-FR")})`,
+      `Appresto — nouveaux codes PIN (${new Date().toLocaleString("fr-FR")})`,
       "Confidentiel : remettez chaque code à son titulaire en main propre, puis supprimez ce fichier.",
       "",
       ...summary.map((s) => `${s.role.padEnd(8)} ${s.username.padEnd(20)} ${s.pin}   ${s.name}`),
@@ -116,7 +116,7 @@ async function main() {
     console.log(`\n${lines.join("\n")}`);
     if (!noFile) {
       // Hors du dépôt Git par défaut, lisible par l'utilisateur courant seulement
-      const file = resolve(option("out") ?? join(homedir(), `thaoni-pins-${stamp}.txt`));
+      const file = resolve(option("out") ?? join(homedir(), `appresto-pins-${stamp}.txt`));
       writeFileSync(file, lines.join("\n"), { mode: 0o600, flag: "wx" });
       console.log(`Récapitulatif (droits 600) : ${file}\nAprès distribution : shred -u "${file}"`);
     }

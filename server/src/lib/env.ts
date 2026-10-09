@@ -50,7 +50,7 @@ const codespaceOrigin =
 
 // Production : liste explicite, HTTPS (ou schéma de l'application native) uniquement
 if (process.env.NODE_ENV === "production") {
-  if (!process.env.CORS_ORIGIN) throw new Error("CORS_ORIGIN est obligatoire en production (ex. https://thaoni-app.up.railway.app,capacitor://localhost)");
+  if (!process.env.CORS_ORIGIN) throw new Error("CORS_ORIGIN est obligatoire en production (ex. https://appresto.up.railway.app,capacitor://localhost)");
   const insecure = corsOrigin.filter((o) => !o.startsWith("https://") && o !== "capacitor://localhost");
   if (insecure.length) throw new Error(`CORS_ORIGIN : origines non HTTPS refusées en production : ${insecure.join(", ")}`);
 }

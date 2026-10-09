@@ -1,4 +1,4 @@
-# Compile l'APK Android de RestoApp sur les serveurs de GitHub (SDK Android préinstallé) :
+# Compile l'APK Android de Appresto sur les serveurs de GitHub (SDK Android préinstallé) :
 # aucun Android Studio nécessaire. L'APK est téléchargeable dans l'onglet « Actions »,
 # rubrique « Artifacts » de l'exécution.
 #
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       server_url:
-        description: "Adresse du serveur RestoApp (ex. http://192.168.1.10:4000 ou https://resto.example.com)"
+        description: "Adresse du serveur Appresto (ex. http://192.168.1.10:4000 ou https://resto.example.com)"
         required: false
   push:
     paths:
@@ -64,7 +64,7 @@ jobs:
           if-no-files-found: error
 
   # APK de production signé (client/scripts/build-signed-apk.sh). Avec les secrets de dépôt
-  # THAONI_KEYSTORE_BASE64 (base64 -w0 thaoni-release-key.jks) et THAONI_KEYSTORE_PASSWORD,
+  # APPRESTO_KEYSTORE_BASE64 (base64 -w0 appresto-release-key.jks) et APPRESTO_KEYSTORE_PASSWORD,
   # l'APK signé avec la vraie clé est publié en artifact. Sans eux, la chaîne complète est
   # vérifiée avec une clé jetable et rien n'est publié.
   release:
@@ -89,40 +89,40 @@ jobs:
       - name: Keystore
         id: keystore
         env:
-          KEYSTORE_BASE64: ${{ secrets.THAONI_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.THAONI_KEYSTORE_PASSWORD }}
+          KEYSTORE_BASE64: ${{ secrets.APPRESTO_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.APPRESTO_KEYSTORE_PASSWORD }}
         run: |
-          ks="$RUNNER_TEMP/thaoni-release-key.jks"
+          ks="$RUNNER_TEMP/appresto-release-key.jks"
           if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > "$ks"
             echo "real=true" >> "$GITHUB_OUTPUT"
             pass="$KEYSTORE_PASSWORD"
           else
-            echo "::notice title=Clé jetable::Secrets THAONI_KEYSTORE_* absents : signature vérifiée avec une clé jetable, APK non publié."
+            echo "::notice title=Clé jetable::Secrets APPRESTO_KEYSTORE_* absents : signature vérifiée avec une clé jetable, APK non publié."
             pass="$(openssl rand -hex 24)"
-            THAONI_KEYSTORE="$ks" THAONI_KEYSTORE_PASSWORD="$pass" THAONI_DNAME="CN=THAONI APP CI" bash client/scripts/create-keystore.sh
+            APPRESTO_KEYSTORE="$ks" APPRESTO_KEYSTORE_PASSWORD="$pass" APPRESTO_DNAME="CN=Appresto CI" bash client/scripts/create-keystore.sh
             echo "real=false" >> "$GITHUB_OUTPUT"
           fi
           echo "::add-mask::$pass"
-          echo "THAONI_KEYSTORE=$ks" >> "$GITHUB_ENV"
-          echo "THAONI_KEYSTORE_PASSWORD=$pass" >> "$GITHUB_ENV"
+          echo "APPRESTO_KEYSTORE=$ks" >> "$GITHUB_ENV"
+          echo "APPRESTO_KEYSTORE_PASSWORD=$pass" >> "$GITHUB_ENV"
 
       - name: Compilation et signature
         env:
-          CAP_SERVER_URL: ${{ inputs.server_url || vars.CAP_SERVER_URL || 'https://thaoni.example.invalid' }}
-          THAONI_VERSION_CODE: ${{ github.run_number }}
+          CAP_SERVER_URL: ${{ inputs.server_url || vars.CAP_SERVER_URL || 'https://appresto.example.invalid' }}
+          APPRESTO_VERSION_CODE: ${{ github.run_number }}
           # Contrôle de la chaîne avec clé jetable : une adresse http (serveur local) est tolérée
-          THAONI_ALLOW_HTTP: ${{ steps.keystore.outputs.real != 'true' }}
+          APPRESTO_ALLOW_HTTP: ${{ steps.keystore.outputs.real != 'true' }}
         run: bash client/scripts/build-signed-apk.sh
 
       - if: steps.keystore.outputs.real == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: thaoni-release-signed-apk
+          name: appresto-release-signed-apk
           path: client/android/app/build/outputs/apk/release/app-release-signed.apk
           retention-days: 30
           if-no-files-found: error
 
       - name: Effacement du keystore
         if: always()
-        run: rm -f "$RUNNER_TEMP/thaoni-release-key.jks"
+        run: rm -f "$RUNNER_TEMP/appresto-release-key.jks"

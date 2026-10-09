@@ -7,9 +7,9 @@ android {
         applicationId "com.restoapp.pos"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // Version de publication : THAONI_VERSION_CODE (entier, à incrémenter à chaque APK publié)
-        versionCode((System.getenv("THAONI_VERSION_CODE") ?: "1") as Integer)
-        versionName(System.getenv("THAONI_VERSION_NAME") ?: "1.0")
+        // Version de publication : APPRESTO_VERSION_CODE (entier, à incrémenter à chaque APK publié)
+        versionCode((System.getenv("APPRESTO_VERSION_CODE") ?: "1") as Integer)
+        versionName(System.getenv("APPRESTO_VERSION_NAME") ?: "1.0")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

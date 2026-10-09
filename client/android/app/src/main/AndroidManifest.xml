@@ -3,7 +3,7 @@
 
     <!--
       Sécurité réseau : HTTPS par défaut ; HTTP en clair autorisé uniquement vers le serveur
-      RestoApp du restaurant (res/xml/network_security_config.xml, régénéré à chaque
+      Appresto du restaurant (res/xml/network_security_config.xml, régénéré à chaque
       « cap sync » depuis CAP_SERVER_URL). Pas de sauvegarde cloud des données de l'appli
       (cookies de session, cache WebView).
     -->

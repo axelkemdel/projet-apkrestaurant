@@ -1,4 +1,4 @@
-"""Génère les icônes et écrans de démarrage Android de THAONI APP à partir du logo.
+"""Génère les icônes et écrans de démarrage Android de Appresto à partir du logo.
 
     pip install pillow
     python3 client/scripts/generate_android_assets.py
@@ -66,4 +66,4 @@ for splash in RES.glob("drawable*/splash.png"):
 (RES / "values/ic_launcher_background.xml").write_text(
     '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#0B1324</color>\n</resources>\n'
 )
-print("Icônes et écrans de démarrage THAONI APP générés.")
+print("Icônes et écrans de démarrage Appresto générés.")

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# APK de production signé de THAONI APP.
+# APK de production signé de Appresto.
 #
-#   CAP_SERVER_URL=https://thaoni-app.up.railway.app npm run apk:release     (depuis la racine)
+#   CAP_SERVER_URL=https://appresto.up.railway.app npm run apk:release     (depuis la racine)
 #
 # Étapes : vite build → npx cap sync android → ./gradlew assembleRelease → zipalign → apksigner
 # → vérification de la signature. Résultat : android/app/build/outputs/apk/release/app-release-signed.apk
 #
 # Variables :
 #   CAP_SERVER_URL            adresse HTTPS du serveur de production (obligatoire)
-#   THAONI_KEYSTORE           keystore (défaut ~/.thaoni/thaoni-release-key.jks, cf. create-keystore.sh)
-#   THAONI_KEY_ALIAS          alias de la clé (défaut thaoni-alias)
-#   THAONI_KEYSTORE_PASSWORD  mot de passe du keystore (demandé s'il est absent, jamais affiché)
-#   THAONI_KEY_PASSWORD       mot de passe de la clé (défaut : celui du keystore)
-#   THAONI_VERSION_CODE       entier à incrémenter à chaque publication (défaut 1)
-#   THAONI_VERSION_NAME       version affichée (défaut 1.0)
+#   APPRESTO_KEYSTORE           keystore (défaut ~/.appresto/appresto-release-key.jks, cf. create-keystore.sh)
+#   APPRESTO_KEY_ALIAS          alias de la clé (défaut appresto-alias)
+#   APPRESTO_KEYSTORE_PASSWORD  mot de passe du keystore (demandé s'il est absent, jamais affiché)
+#   APPRESTO_KEY_PASSWORD       mot de passe de la clé (défaut : celui du keystore)
+#   APPRESTO_VERSION_CODE       entier à incrémenter à chaque publication (défaut 1)
+#   APPRESTO_VERSION_NAME       version affichée (défaut 1.0)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 CLIENT="$(cd "$HERE/.." && pwd)"
@@ -24,26 +24,26 @@ fail() { echo "✘ $*" >&2; exit 1; }
 
 # --- Contrôles préalables -----------------------------------------------------------
 URL="${CAP_SERVER_URL:-${VITE_SERVER_URL:-}}"
-[ -n "$URL" ] || fail "CAP_SERVER_URL manquante (ex. CAP_SERVER_URL=https://thaoni-app.up.railway.app)"
+[ -n "$URL" ] || fail "CAP_SERVER_URL manquante (ex. CAP_SERVER_URL=https://appresto.up.railway.app)"
 case "$URL" in
   https://*) ;;
-  *) [ "${THAONI_ALLOW_HTTP:-}" = "true" ] || fail "Production : adresse HTTPS obligatoire ($URL). THAONI_ALLOW_HTTP=true pour un serveur local sans certificat." ;;
+  *) [ "${APPRESTO_ALLOW_HTTP:-}" = "true" ] || fail "Production : adresse HTTPS obligatoire ($URL). APPRESTO_ALLOW_HTTP=true pour un serveur local sans certificat." ;;
 esac
 export CAP_SERVER_URL="$URL"
 # Pas de débogage Chrome dans un APK de production
 unset CAP_DEBUG
 
-KEYSTORE="${THAONI_KEYSTORE:-$HOME/.thaoni/thaoni-release-key.jks}"
-ALIAS="${THAONI_KEY_ALIAS:-thaoni-alias}"
+KEYSTORE="${APPRESTO_KEYSTORE:-$HOME/.appresto/appresto-release-key.jks}"
+ALIAS="${APPRESTO_KEY_ALIAS:-appresto-alias}"
 [ -f "$KEYSTORE" ] || fail "Keystore introuvable : $KEYSTORE (créez-le avec « npm run keystore:create »)"
-if [ -z "${THAONI_KEYSTORE_PASSWORD:-}" ]; then
-  read -rsp "Mot de passe du keystore : " THAONI_KEYSTORE_PASSWORD; echo
+if [ -z "${APPRESTO_KEYSTORE_PASSWORD:-}" ]; then
+  read -rsp "Mot de passe du keystore : " APPRESTO_KEYSTORE_PASSWORD; echo
 fi
-export THAONI_KEYSTORE_PASSWORD
-export THAONI_KEY_PASSWORD="${THAONI_KEY_PASSWORD:-$THAONI_KEYSTORE_PASSWORD}"
+export APPRESTO_KEYSTORE_PASSWORD
+export APPRESTO_KEY_PASSWORD="${APPRESTO_KEY_PASSWORD:-$APPRESTO_KEYSTORE_PASSWORD}"
 
 use_jdk21
-keytool -list -keystore "$KEYSTORE" -alias "$ALIAS" -storepass:env THAONI_KEYSTORE_PASSWORD >/dev/null 2>&1 \
+keytool -list -keystore "$KEYSTORE" -alias "$ALIAS" -storepass:env APPRESTO_KEYSTORE_PASSWORD >/dev/null 2>&1 \
   || fail "Mot de passe incorrect ou alias « $ALIAS » absent de $KEYSTORE"
 
 # SDK Android : ANDROID_HOME / ANDROID_SDK_ROOT, sinon android/local.properties (npm run android:sdk)
@@ -82,11 +82,11 @@ echo "→ zipalign"
 echo "→ apksigner"
 "$APKSIGNER" sign \
   --ks "$KEYSTORE" --ks-key-alias "$ALIAS" \
-  --ks-pass env:THAONI_KEYSTORE_PASSWORD --key-pass env:THAONI_KEY_PASSWORD \
+  --ks-pass env:APPRESTO_KEYSTORE_PASSWORD --key-pass env:APPRESTO_KEY_PASSWORD \
   --out "$SIGNED" "$ALIGNED"
 rm -f "$ALIGNED" "$SIGNED.idsig"
 "$APKSIGNER" verify --verbose --print-certs "$SIGNED" | grep -E "Verified using|SHA-256 digest" || fail "Signature invalide"
 
 echo
 echo "✔ APK de production signé : $SIGNED"
-echo "  Serveur : $CAP_SERVER_URL · version ${THAONI_VERSION_NAME:-1.0} (${THAONI_VERSION_CODE:-1})"
+echo "  Serveur : $CAP_SERVER_URL · version ${APPRESTO_VERSION_NAME:-1.0} (${APPRESTO_VERSION_CODE:-1})"

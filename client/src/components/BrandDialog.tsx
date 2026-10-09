@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 /**
- * Fenêtre de dialogue aux couleurs THAONI APP (fond flouté, carte sombre, liseré orange),
+ * Fenêtre de dialogue aux couleurs Appresto (fond flouté, carte sombre, liseré orange),
  * pour les messages de session. Le focus est placé sur le bouton principal à l'ouverture.
  */
 export function BrandDialog({

@@ -43,9 +43,9 @@ export function AppHeader({
       }`}
     >
       <span className="flex shrink-0 items-center gap-2">
-        <img src="/assets/logoresto.png" alt="THAONI APP" className="h-9 w-9 rounded-lg object-cover" />
+        <img src="/assets/logoresto.png" alt="Appresto" className="h-9 w-9 rounded-lg object-cover" />
         <span className="hidden text-sm font-black tracking-tight sm:inline">
-          THAONI <span className="text-brand-500">APP</span>
+          APP<span className="text-brand-500">RESTO</span>
         </span>
       </span>
       <h1 className="truncate text-base font-semibold">{title}</h1>

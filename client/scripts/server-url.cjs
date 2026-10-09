@@ -1,4 +1,4 @@
-// Adresse du serveur THAONI APP chargée par l'application Android (Capacitor).
+// Adresse du serveur Appresto chargée par l'application Android (Capacitor).
 // Module CommonJS partagé par capacitor.config.ts, vite.config.ts et le script réseau Android.
 //
 // Ordre de résolution :

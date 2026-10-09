@@ -53,7 +53,7 @@ const httpServer = createServer(app);
 initRealtime(httpServer);
 
 httpServer.listen(env.port, () => {
-  console.log(`THAONI APP — API + Socket.io sur http://localhost:${env.port}`);
+  console.log(`Appresto — API + Socket.io sur http://localhost:${env.port}`);
 });
 
 async function shutdown() {

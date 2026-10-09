@@ -76,7 +76,7 @@ export function LoginPage() {
   }
 
   return (
-    // Identité THAONI APP : photo de salle en fond, voile sombre légèrement flouté pour le contraste
+    // Identité Appresto : photo de salle en fond, voile sombre légèrement flouté pour le contraste
     <div
       className="relative min-h-screen bg-slate-950 bg-cover bg-center bg-no-repeat"
       style={{ backgroundImage: "url(/assets/arrierreplanresto.png)" }}
@@ -91,7 +91,7 @@ export function LoginPage() {
           <div className="mb-6 text-center">
             <img
               src="/assets/logoresto.png"
-              alt="THAONI APP"
+              alt="Appresto"
               className="mx-auto mb-4 w-32 drop-shadow-xl md:w-40"
             />
             <h1 className="flex items-center justify-center gap-2 text-xl font-bold text-white">

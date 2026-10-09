@@ -3,9 +3,9 @@ import { KeyboardResize, KeyboardStyle } from "@capacitor/keyboard";
 import { resolveServerUrl } from "./scripts/server-url.cjs";
 
 /**
- * Application Android THAONI APP (tablettes serveur / cuisine / caisse).
+ * Application Android Appresto (tablettes serveur / cuisine / caisse).
  *
- * L'application charge l'interface depuis le serveur THAONI APP : interface et API
+ * L'application charge l'interface depuis le serveur Appresto : interface et API
  * partagent alors la même origine, condition pour les cookies de session HttpOnly +
  * SameSite=Strict, et une mise à jour de l'interface sur le serveur arrive sur toutes
  * les tablettes sans réinstaller l'APK.
@@ -24,7 +24,7 @@ if (server) {
 
 const config: CapacitorConfig = {
   appId: "com.restoapp.pos",
-  appName: "THAONI APP",
+  appName: "Appresto",
   webDir: "dist",
   server: {
     androidScheme: "https",

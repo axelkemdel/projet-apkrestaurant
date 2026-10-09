@@ -1,7 +1,7 @@
 // Génère android/app/src/main/res/xml/network_security_config.xml à partir de l'adresse du serveur.
 // Exécuté automatiquement après « npx cap sync » (script npm capacitor:sync:after).
 //  - HTTPS obligatoire partout (certificats système uniquement) ;
-//  - HTTP en clair autorisé UNIQUEMENT vers l'hôte du serveur RestoApp s'il est en http://
+//  - HTTP en clair autorisé UNIQUEMENT vers l'hôte du serveur Appresto s'il est en http://
 //    (serveur du réseau local sans certificat). Recommandé : HTTPS, aucune exception.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -21,7 +21,7 @@ if (raw) {
 const escape = (s) => s.replace(/[<>&"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const domain = cleartextHost
   ? `
-    <!-- Serveur THAONI APP du réseau local en HTTP (${escape(raw)}) -->
+    <!-- Serveur Appresto du réseau local en HTTP (${escape(raw)}) -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">${escape(cleartextHost)}</domain>
     </domain-config>`

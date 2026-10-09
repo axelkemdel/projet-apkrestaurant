@@ -1,4 +1,4 @@
-# THAONI APP — POS & KDS temps réel pour restaurants
+# Appresto — POS & KDS temps réel pour restaurants
 
 Application de gestion des commandes : prise de commande par les serveurs (tablette / mobile), écran cuisine & bar (KDS) en temps réel, caisse et tableau de bord gérant.
 
@@ -357,7 +357,7 @@ Audit complet (authentification, RBAC, injections, Socket.io, en-têtes, limites
 
 **1. Base et service**
 1. Railway → *New Project* → *Deploy from GitHub repo* (ce dépôt), puis *+ New* → *Database* → *PostgreSQL* (mot de passe fort généré, base joignable uniquement par le réseau privé).
-2. Service THAONI APP : laisser le *Root Directory* à la racine du dépôt. `railway.json` définit le build (`npm ci --include=dev && CI=true npm run build` : client + serveur) et le démarrage (`prisma migrate deploy` puis `node dist/index.js`, sur le `PORT` fourni par Railway), avec contrôle de santé `/api/health`. `server/Procfile` contient la même commande, pour un service dont la racine est `server/`.
+2. Service Appresto : laisser le *Root Directory* à la racine du dépôt. `railway.json` définit le build (`npm ci --include=dev && CI=true npm run build` : client + serveur) et le démarrage (`prisma migrate deploy` puis `node dist/index.js`, sur le `PORT` fourni par Railway), avec contrôle de santé `/api/health`. `server/Procfile` contient la même commande, pour un service dont la racine est `server/`.
 3. *Variables* → *Raw Editor* : coller `server/.env.production.example`, puis `DATABASE_URL=${{Postgres.DATABASE_URL}}` et `JWT_SECRET` = résultat de `openssl rand -hex 64`.
 4. *Settings* → *Networking* → *Generate Domain* ; reporter l'adresse dans `CORS_ORIGIN` (`https://<domaine>,capacitor://localhost`).
 5. *+ New* → *Volume* monté sur `/data` (photos des plats, `UPLOADS_DIR=/data/uploads`).
@@ -370,26 +370,26 @@ NODE_ENV=production ALLOW_DEMO_SEED=true npm run db:seed -w server   # carte, ta
 NODE_ENV=production npm run pins:reset -- --all --confirm            # PIN aléatoires à 6 chiffres
 ```
 
-`server/scripts/reset-demo-pins.ts` détecte les PIN faibles (0000, 1111, 1234…, sans `--all`) en les comparant aux hachages, attribue à chaque compte un PIN unique à 6 chiffres (haché bcrypt, coût 12), ferme ses sessions et trace `PIN_RESET` au journal. Les PIN s'affichent une fois et sont écrits dans `~/thaoni-pins-<date>.txt` (droits 600, hors dépôt) : les remettre en main propre puis `shred -u` le fichier. `--dry-run` simule.
+`server/scripts/reset-demo-pins.ts` détecte les PIN faibles (0000, 1111, 1234…, sans `--all`) en les comparant aux hachages, attribue à chaque compte un PIN unique à 6 chiffres (haché bcrypt, coût 12), ferme ses sessions et trace `PIN_RESET` au journal. Les PIN s'affichent une fois et sont écrits dans `~/appresto-pins-<date>.txt` (droits 600, hors dépôt) : les remettre en main propre puis `shred -u` le fichier. `--dry-run` simule.
 
 **3. APK de production signé**
 
 ```bash
-npm run keystore:create          # une seule fois : ~/.thaoni/thaoni-release-key.jks (alias thaoni-alias)
-CAP_SERVER_URL=https://<domaine-railway> THAONI_VERSION_CODE=2 npm run apk:release
+npm run keystore:create          # une seule fois : ~/.appresto/appresto-release-key.jks (alias appresto-alias)
+CAP_SERVER_URL=https://<domaine-railway> APPRESTO_VERSION_CODE=2 npm run apk:release
 ```
 
-`keystore:create` exécute `keytool -genkey -v -keystore thaoni-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias thaoni-alias` et refuse d'écraser un keystore existant. **Sauvegarder le keystore et son mot de passe hors de la machine** : sans eux, plus aucune mise à jour de l'application installée n'est possible. `apk:release` (`client/scripts/build-signed-apk.sh`) : `vite build` → `npx cap sync android` → `./gradlew assembleRelease` → `zipalign` → `apksigner` (mot de passe demandé ou `THAONI_KEYSTORE_PASSWORD`, jamais affiché) → vérification. Résultat : `client/android/app/build/outputs/apk/release/app-release-signed.apk`. Adresse HTTPS obligatoire ; `THAONI_VERSION_CODE` à incrémenter à chaque publication.
+`keystore:create` exécute `keytool -genkey -v -keystore appresto-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias appresto-alias` et refuse d'écraser un keystore existant. **Sauvegarder le keystore et son mot de passe hors de la machine** : sans eux, plus aucune mise à jour de l'application installée n'est possible. `apk:release` (`client/scripts/build-signed-apk.sh`) : `vite build` → `npx cap sync android` → `./gradlew assembleRelease` → `zipalign` → `apksigner` (mot de passe demandé ou `APPRESTO_KEYSTORE_PASSWORD`, jamais affiché) → vérification. Résultat : `client/android/app/build/outputs/apk/release/app-release-signed.apk`. Adresse HTTPS obligatoire ; `APPRESTO_VERSION_CODE` à incrémenter à chaque publication.
 
-Sans SDK Android local, GitHub Actions compile l'APK signé : secrets de dépôt `THAONI_KEYSTORE_BASE64` (`base64 -w0 ~/.thaoni/thaoni-release-key.jks`) et `THAONI_KEYSTORE_PASSWORD`, variable `CAP_SERVER_URL` ; artifact `thaoni-release-signed-apk`. Sans ces secrets, la chaîne est vérifiée avec une clé jetable et rien n'est publié.
+Sans SDK Android local, GitHub Actions compile l'APK signé : secrets de dépôt `APPRESTO_KEYSTORE_BASE64` (`base64 -w0 ~/.appresto/appresto-release-key.jks`) et `APPRESTO_KEYSTORE_PASSWORD`, variable `CAP_SERVER_URL` ; artifact `appresto-release-signed-apk`. Sans ces secrets, la chaîne est vérifiée avec une clé jetable et rien n'est publié.
 
 `.gitignore` exclut `*.jks`, `*.keystore`, `*-signed.apk`, `.env.*` (hors modèles) et les récapitulatifs de PIN.
 
 ## Application Android (Capacitor)
 
-Le dossier `client/android/` est un projet Android Studio prêt à compiler (Capacitor 8, application **THAONI APP**, identifiant **`com.restoapp.pos`**, interface web `client/dist`). Plugins : `@capacitor/status-bar` (barre d'état sombre), `@capacitor/keyboard` (l'écran se redimensionne au-dessus du clavier virtuel), `@capacitor/screen-orientation` (**paysage imposé** pour la caisse et la cuisine, orientation libre ailleurs).
+Le dossier `client/android/` est un projet Android Studio prêt à compiler (Capacitor 8, application **Appresto**, identifiant **`com.restoapp.pos`**, interface web `client/dist`). Plugins : `@capacitor/status-bar` (barre d'état sombre), `@capacitor/keyboard` (l'écran se redimensionne au-dessus du clavier virtuel), `@capacitor/screen-orientation` (**paysage imposé** pour la caisse et la cuisine, orientation libre ailleurs).
 
-**Principe** : l'APK charge l'interface depuis le serveur THAONI APP. Interface et API ont ainsi la même origine, condition pour des cookies `HttpOnly` + `SameSite=Strict`, et une mise à jour de l'interface sur le serveur arrive sur toutes les tablettes sans réinstaller l'APK. En production, le serveur Node sert lui-même l'interface compilée (`npm run build` puis `npm start -w server` : interface + API sur le port 4000).
+**Principe** : l'APK charge l'interface depuis le serveur Appresto. Interface et API ont ainsi la même origine, condition pour des cookies `HttpOnly` + `SameSite=Strict`, et une mise à jour de l'interface sur le serveur arrive sur toutes les tablettes sans réinstaller l'APK. En production, le serveur Node sert lui-même l'interface compilée (`npm run build` puis `npm start -w server` : interface + API sur le port 4000).
 
 **Adresse du serveur** (`client/scripts/server-url.cjs`, utilisée par `capacitor.config.ts`, `vite build` et la configuration réseau Android), dans cet ordre :
 1. `CAP_SERVER_URL` (ou `VITE_SERVER_URL`) si elle est définie — recommandé en production ;
